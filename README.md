@@ -2,6 +2,66 @@
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
+## Iframe Payment Widget
+
+This app exposes a lightweight iframe-friendly route at `/widget` that renders a payment widget suitable for embedding as a microfrontend.
+
+### Embed in host
+
+```html
+<iframe id="payment-widget" src="https://your-domain.example/widget" style="width: 600px; height: 520px; border: 0;"></iframe>
+<script>
+  const iframe = document.getElementById('payment-widget');
+
+  // Wait for the widget to say it's READY, then send INIT
+  window.addEventListener('message', (event) => {
+    if (!event.data || event.data.source !== 'payment-widget') return;
+    if (event.data.type === 'READY') {
+      iframe.contentWindow.postMessage({ source: 'host-app', type: 'INIT', payload: {
+        amount: 2262,
+        currency: 'AED',
+        alias: 'Self pay balance',
+        description: 'Encounter 100023'
+      } }, '*');
+    }
+
+    if (event.data.type === 'RESULT') {
+      console.log('Payment result', event.data.data);
+      // success payload example:
+      // { success: true, amount: 2262, currency: 'AED', alias: '...', description: '...', transactionId: '...' }
+    }
+
+    if (event.data.type === 'CANCELLED') {
+      console.log('Payment cancelled', event.data.data);
+    }
+
+    if (event.data.type === 'ERROR') {
+      console.error('Payment error', event.data.data);
+    }
+  });
+
+  // Optional: cancel from the host
+  // iframe.contentWindow.postMessage({ source: 'host-app', type: 'CANCEL' }, '*');
+</script>
+```
+
+### URL init fallback
+
+For static hosting or simple demos, you can pass init data via the `init` query parameter:
+
+```
+/widget?init=%7B%22amount%22%3A2262%2C%22currency%22%3A%22AED%22%2C%22alias%22%3A%22Self%20pay%22%2C%22description%22%3A%22Encounter%22%7D
+```
+
+### Events
+
+- `READY` (widget -> host): widget is ready to receive `INIT`.
+- `INIT` (host -> widget): optional payload `{ amount, currency, alias, description }`.
+- `RESULT` (widget -> host): `{ success, amount, currency, alias, description, transactionId? }`.
+- `CANCELLED` (either direction): cancellation notification.
+- `ERROR` (widget -> host): unexpected error.
+
+
 ## Available Scripts
 
 In the project directory, you can run:

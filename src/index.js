@@ -3,11 +3,16 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
+import PaymentWidget from './payment-widget/PaymentWidget';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
+
+// Lightweight routing without adding a router: render widget for "/widget" path.
+const isWidgetRoute = window.location.pathname === '/widget';
+
 root.render(
   <React.StrictMode>
-    <App />
+    {isWidgetRoute ? <PaymentWidget /> : <App />}
   </React.StrictMode>
 );
 
