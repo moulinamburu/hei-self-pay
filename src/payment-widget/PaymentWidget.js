@@ -53,7 +53,7 @@ export default function PaymentWidget() {
     cashAmounts: [],
     cardAmounts: [],
     chequeAmounts: [],
-    totals: '',
+    remainingDue: '',
   });
   const parentOriginRef = useRef(ORIGIN_ANY);
 
@@ -71,10 +71,9 @@ export default function PaymentWidget() {
   const displayTotalDue = useMemo(() => formatCurrency(amount || 0), [formatCurrency, amount]);
   const remainingDue = useMemo(() => Math.max((Number(amount || 0) || 0) - totalPayment, 0), [amount, totalPayment]);
   const displayRemainingDue = useMemo(() => formatCurrency(remainingDue), [formatCurrency, remainingDue]);
-  const totalsMatch = useMemo(() => (Number(amount || 0) || 0) === totalPayment, [amount, totalPayment]);
-  const shouldShowTotalsError = useMemo(
-    () => (Number(amount || 0) || 0) > 0 && !totalsMatch && (submitAttempted || totalPayment > 0),
-    [amount, totalsMatch, submitAttempted, totalPayment]
+  const shouldShowRemainingDueError = useMemo(
+    () => remainingDue > 0 && (submitAttempted || totalPayment > 0),
+    [remainingDue, submitAttempted, totalPayment]
   );
 
   useEffect(() => {
@@ -194,7 +193,7 @@ export default function PaymentWidget() {
       cashAmounts: [],
       cardAmounts: [],
       chequeAmounts: [],
-      totals: '',
+      remainingDue: '',
     };
 
     if (!receivedFrom) errs.receivedFrom = 'Required';
@@ -223,12 +222,9 @@ export default function PaymentWidget() {
       else if (!/^\d{3,4}$/.test(cvv)) errs.cvv = 'Enter valid CVV';
     }
 
-    // Totals validation: sum of splits must equal Total Due
-    const sum = (splits) => splits.reduce((acc, s) => acc + (Number(s.amount) || 0), 0);
-    const due = Number(amount || 0) || 0;
-    const paid = sum(cashSplits) + sum(cardSplits) + sum(chequeSplits);
-    if (paid !== due) {
-      errs.totals = 'Total payment must equal Total Due';
+    // Block if remaining due is greater than zero (underpayment)
+    if (remainingDue > 0) {
+      errs.remainingDue = 'Please pay the full amount';
     }
 
     return errs;
@@ -243,7 +239,7 @@ export default function PaymentWidget() {
       errs.cardNumber ||
       errs.expiry ||
       errs.cvv ||
-      errs.totals ||
+      errs.remainingDue ||
       aliasArrays.some(Boolean) ||
       amountArrays.some(Boolean)
     );
@@ -342,8 +338,8 @@ export default function PaymentWidget() {
             <div className="pw-chip-label">Total Payment</div>
           </div>
         </div>
-        {shouldShowTotalsError && (
-          <div className="pw-error">Total payment must equal Total Due</div>
+        {shouldShowRemainingDueError && (
+          <div className="pw-error">Please pay the full amount</div>
         )}
 
         <div className="pw-section">
@@ -752,7 +748,7 @@ export default function PaymentWidget() {
               <button
                 type="submit"
                 className="pw-btn"
-                disabled={submitting || ((Number(amount || 0) || 0) > 0 && remainingDue !== 0)}
+                disabled={submitting || remainingDue > 0}
               >
                 {submitting ? 'Processing…' : 'Submit'}
               </button>
