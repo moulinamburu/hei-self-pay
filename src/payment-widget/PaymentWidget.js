@@ -53,15 +53,37 @@ export default function PaymentWidget() {
     cashAmounts: [],
     cardAmounts: [],
     chequeAmounts: [],
+    totals: '',
   });
   const parentOriginRef = useRef(ORIGIN_ANY);
 
   const queryParams = useMemo(() => new URLSearchParams(window.location.search), []);
   const isZero = useMemo(() => Number(amount || 0) === 0, [amount]);
-  const displayTotalPayment = useMemo(
-    () => `${currency}${(Number(amount || 0)).toLocaleString()}`,
-    [currency, amount],
+
+  const sumSplitAmounts = React.useCallback((splits) => splits.reduce((sum, s) => sum + (Number(s.amount) || 0), 0), []);
+  const cashTotal = useMemo(() => sumSplitAmounts(cashSplits), [sumSplitAmounts, cashSplits]);
+  const cardTotal = useMemo(() => sumSplitAmounts(cardSplits), [sumSplitAmounts, cardSplits]);
+  const chequeTotal = useMemo(() => sumSplitAmounts(chequeSplits), [sumSplitAmounts, chequeSplits]);
+  const totalPayment = useMemo(() => cashTotal + cardTotal + chequeTotal, [cashTotal, cardTotal, chequeTotal]);
+
+  const formatCurrency = React.useCallback((amt) => `${currency}${(Number(amt) || 0).toLocaleString()}`,[currency]);
+  const displayTotalPayment = useMemo(() => formatCurrency(totalPayment), [formatCurrency, totalPayment]);
+  const displayTotalDue = useMemo(() => formatCurrency(amount || 0), [formatCurrency, amount]);
+  const remainingDue = useMemo(() => Math.max((Number(amount || 0) || 0) - totalPayment, 0), [amount, totalPayment]);
+  const displayRemainingDue = useMemo(() => formatCurrency(remainingDue), [formatCurrency, remainingDue]);
+  const totalsMatch = useMemo(() => (Number(amount || 0) || 0) === totalPayment, [amount, totalPayment]);
+  const shouldShowTotalsError = useMemo(
+    () => (Number(amount || 0) || 0) > 0 && !totalsMatch && (submitAttempted || totalPayment > 0),
+    [amount, totalsMatch, submitAttempted, totalPayment]
   );
+
+  useEffect(() => {
+    const totalDueNum = Number(amount || 0) || 0;
+    const nonCashPaid = cardTotal + chequeTotal;
+    const remainingBeforeCash = Math.max(totalDueNum - nonCashPaid, 0);
+    const change = Math.max(cashTotal - remainingBeforeCash, 0);
+    setChangeDue(change.toFixed(2));
+  }, [amount, cashTotal, cardTotal, chequeTotal]);
 
   // Allow host to pass init via URL for static hosting fallback
   useEffect(() => {
@@ -161,6 +183,7 @@ export default function PaymentWidget() {
       cashAmounts: [],
       cardAmounts: [],
       chequeAmounts: [],
+      totals: '',
     };
 
     if (!receivedFrom) errs.receivedFrom = 'Required';
@@ -189,6 +212,14 @@ export default function PaymentWidget() {
       else if (!/^\d{3,4}$/.test(cvv)) errs.cvv = 'Enter valid CVV';
     }
 
+    // Totals validation: sum of splits must equal Total Due
+    const sum = (splits) => splits.reduce((acc, s) => acc + (Number(s.amount) || 0), 0);
+    const due = Number(amount || 0) || 0;
+    const paid = sum(cashSplits) + sum(cardSplits) + sum(chequeSplits);
+    if (paid !== due) {
+      errs.totals = 'Total payment must equal Total Due';
+    }
+
     return errs;
   }
 
@@ -201,6 +232,7 @@ export default function PaymentWidget() {
       errs.cardNumber ||
       errs.expiry ||
       errs.cvv ||
+      errs.totals ||
       aliasArrays.some(Boolean) ||
       amountArrays.some(Boolean)
     );
@@ -286,11 +318,11 @@ export default function PaymentWidget() {
           {!isZero && (
             <>
               <div className="pw-chip pw-chip-info">
-                <div className="pw-chip-amount">AED20,708</div>
+                <div className="pw-chip-amount">{displayTotalDue}</div>
                 <div className="pw-chip-label">Total Due</div>
               </div>
               <div className="pw-chip pw-chip-warn">
-                <div className="pw-chip-amount">-AED10</div>
+                <div className="pw-chip-amount">{displayRemainingDue}</div>
                 <div className="pw-chip-label">Remaining Due</div>
               </div>
             </>
@@ -300,6 +332,9 @@ export default function PaymentWidget() {
             <div className="pw-chip-label">Total Payment</div>
           </div>
         </div>
+        {shouldShowTotalsError && (
+          <div className="pw-error">Total payment must equal Total Due</div>
+        )}
 
         <div className="pw-section">
           <div className="pw-section-title">Payment details</div>
@@ -704,7 +739,11 @@ export default function PaymentWidget() {
               >
                 Cancel
               </button>
-              <button type="submit" className="pw-btn" disabled={submitting}>
+              <button
+                type="submit"
+                className="pw-btn"
+                disabled={submitting || ((Number(amount || 0) || 0) > 0 && remainingDue !== 0)}
+              >
                 {submitting ? 'Processing…' : 'Submit'}
               </button>
             </div>
