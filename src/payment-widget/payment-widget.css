@@ -84,10 +84,18 @@
   .pw-form-row {
     grid-template-columns: 1fr;
   }
+  .pw-form-row-three {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Fields */
-.pw-field { display: flex; flex-direction: column; gap: 6px; }
+.pw-field { 
+  display: flex; 
+  flex-direction: column; 
+  gap: 6px;
+  min-width: 0;
+}
 .pw-label { font-size: 12px; color: #475569; }
 .pw-input {
   border: 1px solid #cbd5e1;
@@ -97,9 +105,17 @@
   background: #ffffff;
   color: #0f172a;
   width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;
+}
+
+.pw-input-readonly {
+  background: #f8fafc;
+  color: #475569;
+  cursor: not-allowed;
 }
 
 .pw-textarea {
@@ -157,13 +173,45 @@
   margin-top: 8px;
 }
 
+/* Credit Card Details */
+.pw-credit-card-details {
+  margin-top: 16px;
+  padding: 16px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pw-credit-card-details-inline {
+  padding: 16px;
+  background: #ffffff;
+  border-radius: 8px;
+  border: 1px solid #a0d9e6;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.pw-form-row-three {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
 .pw-radio-group {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.pw-radio-label {
+.pw-radio-label,
+.pw-checkbox-label {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -175,19 +223,23 @@
   background: #ffffff;
 }
 
-.pw-radio-label:hover {
+.pw-radio-label:hover,
+.pw-checkbox-label:hover {
   border-color: #cbd5e1;
   background: #f8fafc;
 }
 
-.pw-radio-label input[type="radio"] {
+.pw-radio-label input[type="radio"],
+.pw-checkbox-label input[type="checkbox"] {
   margin: 0;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   accent-color: #2563eb;
+  cursor: pointer;
 }
 
-.pw-radio-text {
+.pw-radio-text,
+.pw-checkbox-text {
   font-size: 14px;
   font-weight: 500;
   color: #0f172a;
