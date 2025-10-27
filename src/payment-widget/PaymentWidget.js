@@ -109,15 +109,18 @@ export default function PaymentWidget() {
   // postMessage handshake
   useEffect(() => {
     function post(type, data) {
-      window.parent.postMessage({ source: 'payment-widget', type, data }, parentOriginRef.current);
+      // Use wildcard origin to ensure delivery across dev hosts/ports
+      window.parent.postMessage({ source: 'payment-widget', type, data }, ORIGIN_ANY);
     }
 
     function handleMessage(event) {
       const { data, origin } = event;
       if (!data || data.source === 'payment-widget') return;
       const { type, payload } = data;
-      // Record parent's origin on first valid message
-      parentOriginRef.current = origin;
+      // Record parent's origin only for recognized host messages
+      if (data && (data.source === 'patient-accounting-ui' || data.type === 'INIT' || data.type === 'CANCEL')) {
+        parentOriginRef.current = origin;
+      }
 
       if (type === 'INIT') {
         setInitPayload(payload || {});
@@ -154,9 +157,17 @@ export default function PaymentWidget() {
       currencyTendered,
       description,
       paymentMethods,
+      totalPayment,
+      remainingDue,
+      splits: {
+        cash: cashSplits,
+        card: cardSplits,
+        cheque: chequeSplits,
+      },
       ...extra,
     };
-    window.parent.postMessage({ source: 'payment-widget', type: 'RESULT', data: payload }, parentOriginRef.current);
+    // Use wildcard origin to avoid origin mismatches in development
+    window.parent.postMessage({ source: 'payment-widget', type: 'RESULT', data: payload }, ORIGIN_ANY);
   }
 
   function isExpiredMmYy(mmYy) {
@@ -244,9 +255,8 @@ export default function PaymentWidget() {
     const errs = validateAll();
     setFieldErrors(errs);
     setSubmitAttempted(true);
-    if (hasAnyError(errs)) {
-      return; // do not submit until valid
-    }
+    // Block submission if any validation errors are present
+    if (hasAnyError(errs)) return;
     setSubmitting(true);
     // Simulate processing delay; integrate real API here
     setTimeout(() => {
