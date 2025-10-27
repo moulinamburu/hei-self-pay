@@ -33,6 +33,27 @@ export default function PaymentWidget() {
   const [chequeDate, setChequeDate] = useState('');
   const [changeDue, setChangeDue] = useState('0.00');
   const [submitting, setSubmitting] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+  const [touched, setTouched] = useState({
+    receivedFrom: false,
+    currencyTendered: false,
+    cardNumber: false,
+    expiry: false,
+    cvv: false,
+  });
+  const [fieldErrors, setFieldErrors] = useState({
+    receivedFrom: '',
+    currencyTendered: '',
+    cardNumber: '',
+    expiry: '',
+    cvv: '',
+    cashAliases: [],
+    cardAliases: [],
+    chequeAliases: [],
+    cashAmounts: [],
+    cardAmounts: [],
+    chequeAmounts: [],
+  });
   const parentOriginRef = useRef(ORIGIN_ANY);
 
   const queryParams = useMemo(() => new URLSearchParams(window.location.search), []);
@@ -116,9 +137,84 @@ export default function PaymentWidget() {
     window.parent.postMessage({ source: 'payment-widget', type: 'RESULT', data: payload }, parentOriginRef.current);
   }
 
+  function isExpiredMmYy(mmYy) {
+    const match = /^(0[1-9]|1[0-2])\/(\d{2})$/.exec(mmYy);
+    if (!match) return true;
+    const month = Number(match[1]);
+    const year = 2000 + Number(match[2]);
+    const now = new Date();
+    const endOfMonth = new Date(year, month, 0); // last day of month
+    endOfMonth.setHours(23, 59, 59, 999);
+    return endOfMonth < now;
+  }
+
+  function validateAll() {
+    const errs = {
+      receivedFrom: '',
+      currencyTendered: '',
+      cardNumber: '',
+      expiry: '',
+      cvv: '',
+      cashAliases: [],
+      cardAliases: [],
+      chequeAliases: [],
+      cashAmounts: [],
+      cardAmounts: [],
+      chequeAmounts: [],
+    };
+
+    if (!receivedFrom) errs.receivedFrom = 'Required';
+    if (!currencyTendered) errs.currencyTendered = 'Required';
+
+    if (paymentMethods.includes('Cash')) {
+      errs.cashAliases = cashSplits.map(s => (s.alias ? '' : 'Select a payment alias'));
+      errs.cashAmounts = cashSplits.map(s => (s.amount !== '' && Number(s.amount) <= 0 ? 'Amount should be greater than 0' : ''));
+    }
+    if (paymentMethods.includes('Cheque')) {
+      errs.chequeAliases = chequeSplits.map(s => (s.alias ? '' : 'Select a payment alias'));
+      errs.chequeAmounts = chequeSplits.map(s => (s.amount !== '' && Number(s.amount) <= 0 ? 'Amount should be greater than 0' : ''));
+    }
+    if (paymentMethods.includes('Credit card')) {
+      errs.cardAliases = cardSplits.map(s => (s.alias ? '' : 'Select a payment alias'));
+      errs.cardAmounts = cardSplits.map(s => (s.amount !== '' && Number(s.amount) <= 0 ? 'Amount should be greater than 0' : ''));
+      const digits = (cardNumber || '').replace(/\s+/g, '');
+      if (!digits) errs.cardNumber = 'Enter card number';
+      else if (!/^\d{12,19}$/.test(digits)) errs.cardNumber = 'Enter a valid card number';
+
+      if (!expiry) errs.expiry = 'Enter expiry';
+      else if (!/^(0[1-9]|1[0-2])\/\d{2}$/.test(expiry)) errs.expiry = 'Enter valid MM/YY';
+      else if (isExpiredMmYy(expiry)) errs.expiry = 'Card expired';
+
+      if (!cvv) errs.cvv = 'Enter CVV';
+      else if (!/^\d{3,4}$/.test(cvv)) errs.cvv = 'Enter valid CVV';
+    }
+
+    return errs;
+  }
+
+  function hasAnyError(errs) {
+    const aliasArrays = [...(errs.cashAliases || []), ...(errs.cardAliases || []), ...(errs.chequeAliases || [])];
+    const amountArrays = [...(errs.cashAmounts || []), ...(errs.cardAmounts || []), ...(errs.chequeAmounts || [])];
+    return Boolean(
+      errs.receivedFrom ||
+      errs.currencyTendered ||
+      errs.cardNumber ||
+      errs.expiry ||
+      errs.cvv ||
+      aliasArrays.some(Boolean) ||
+      amountArrays.some(Boolean)
+    );
+  }
+
   function handleSubmit(e) {
     e.preventDefault();
     if (submitting) return;
+    const errs = validateAll();
+    setFieldErrors(errs);
+    setSubmitAttempted(true);
+    if (hasAnyError(errs)) {
+      return; // do not submit until valid
+    }
     setSubmitting(true);
     // Simulate processing delay; integrate real API here
     setTimeout(() => {
@@ -218,6 +314,7 @@ export default function PaymentWidget() {
                     className="pw-input" 
                     value={receivedFrom}
                     onChange={(e) => setReceivedFrom(e.target.value)}
+                    onBlur={() => { setTouched(prev => ({ ...prev, receivedFrom: true })); setFieldErrors(validateAll()); }}
                   >
                     <option value="">Select</option>
                     <option value="patient">Patient</option>
@@ -228,6 +325,9 @@ export default function PaymentWidget() {
                     <path d="M4 6L8 10L12 6" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
                 </div>
+                {(touched.receivedFrom || submitAttempted) && fieldErrors.receivedFrom && (
+                  <div className="pw-error">{fieldErrors.receivedFrom}</div>
+                )}
               </div>
 
               <div className="pw-field">
@@ -238,6 +338,7 @@ export default function PaymentWidget() {
                     className="pw-input"
                     value={currencyTendered}
                     onChange={(e) => setCurrencyTendered(e.target.value)}
+                    onBlur={() => { setTouched(prev => ({ ...prev, currencyTendered: true })); setFieldErrors(validateAll()); }}
                   >
                     <option value="">Select</option>
                     <option value="AED">AED</option>
@@ -248,6 +349,9 @@ export default function PaymentWidget() {
                     <path d="M4 6L8 10L12 6" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
                 </div>
+                {(touched.currencyTendered || submitAttempted) && fieldErrors.currencyTendered && (
+                  <div className="pw-error">{fieldErrors.currencyTendered}</div>
+                )}
               </div>
             </div>
 
@@ -301,6 +405,9 @@ export default function PaymentWidget() {
                               placeholder="0"
                             />
                           </div>
+                          {((submitAttempted && fieldErrors.cashAmounts[idx]) || (split.amount !== '' && Number(split.amount) === 0)) && (
+                            <div className="pw-error">{fieldErrors.cashAmounts[idx] || 'Amount should be greater than 0'}</div>
+                          )}
                           {isZero && idx === cashSplits.length - 1 && (
                             <button type="button" className="pw-link-btn" onClick={addCashSplit}>+ Add</button>
                           )}
@@ -323,6 +430,9 @@ export default function PaymentWidget() {
                               <path d="M4 6L8 10L12 6" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                             </svg>
                           </div>
+                          {submitAttempted && fieldErrors.cashAliases[idx] && (
+                            <div className="pw-error">{fieldErrors.cashAliases[idx]}</div>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -397,6 +507,9 @@ export default function PaymentWidget() {
                               placeholder="0"
                             />
                           </div>
+                          {((submitAttempted && fieldErrors.cardAmounts[idx]) || (split.amount !== '' && Number(split.amount) === 0)) && (
+                            <div className="pw-error">{fieldErrors.cardAmounts[idx] || 'Amount should be greater than 0'}</div>
+                          )}
                           {isZero && idx === cardSplits.length - 1 && (
                             <button type="button" className="pw-link-btn" onClick={addCardSplit}>+ Add</button>
                           )}
@@ -419,6 +532,9 @@ export default function PaymentWidget() {
                               <path d="M4 6L8 10L12 6" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                             </svg>
                           </div>
+                          {submitAttempted && fieldErrors.cardAliases[idx] && (
+                            <div className="pw-error">{fieldErrors.cardAliases[idx]}</div>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -433,9 +549,13 @@ export default function PaymentWidget() {
                           type="text"
                           value={cardNumber}
                           onChange={(e) => setCardNumber(e.target.value)}
+                          onBlur={() => { setTouched(prev => ({ ...prev, cardNumber: true })); setFieldErrors(validateAll()); }}
                           placeholder="1234 5678 9012 3456"
                           maxLength="19"
                         />
+                        {(touched.cardNumber || submitAttempted) && fieldErrors.cardNumber && (
+                          <div className="pw-error">{fieldErrors.cardNumber}</div>
+                        )}
                       </div>
 
                       <div className="pw-field">
@@ -446,9 +566,13 @@ export default function PaymentWidget() {
                           type="text"
                           value={expiry}
                           onChange={(e) => setExpiry(e.target.value)}
+                          onBlur={() => { setTouched(prev => ({ ...prev, expiry: true })); setFieldErrors(validateAll()); }}
                           placeholder="MM/YY"
                           maxLength="5"
                         />
+                        {(touched.expiry || submitAttempted) && fieldErrors.expiry && (
+                          <div className="pw-error">{fieldErrors.expiry}</div>
+                        )}
                       </div>
 
                       <div className="pw-field">
@@ -459,9 +583,13 @@ export default function PaymentWidget() {
                           type="password"
                           value={cvv}
                           onChange={(e) => setCvv(e.target.value)}
+                          onBlur={() => { setTouched(prev => ({ ...prev, cvv: true })); setFieldErrors(validateAll()); }}
                           placeholder="***"
                           maxLength="4"
                         />
+                        {(touched.cvv || submitAttempted) && fieldErrors.cvv && (
+                          <div className="pw-error">{fieldErrors.cvv}</div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -499,6 +627,9 @@ export default function PaymentWidget() {
                               placeholder="0"
                             />
                           </div>
+                          {((submitAttempted && fieldErrors.chequeAmounts[idx]) || (split.amount !== '' && Number(split.amount) === 0)) && (
+                            <div className="pw-error">{fieldErrors.chequeAmounts[idx] || 'Amount should be greater than 0'}</div>
+                          )}
                           {isZero && idx === chequeSplits.length - 1 && (
                             <button type="button" className="pw-link-btn" onClick={addChequeSplit}>+ Add</button>
                           )}
@@ -521,6 +652,9 @@ export default function PaymentWidget() {
                               <path d="M4 6L8 10L12 6" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                             </svg>
                           </div>
+                          {submitAttempted && fieldErrors.chequeAliases[idx] && (
+                            <div className="pw-error">{fieldErrors.chequeAliases[idx]}</div>
+                          )}
                         </div>
                       </div>
                     ))}
