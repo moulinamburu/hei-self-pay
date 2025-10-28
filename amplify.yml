@@ -10,7 +10,7 @@ applications:
           commands:
             - pnpm build
       artifacts:
-        baseDirectory: dist # or build (depends on your app)
+        baseDirectory: build # or build (depends on your app)
         files:
           - '**/*'
       cache:
