@@ -4,11 +4,10 @@ applications:
       phases:
         preBuild:
           commands:
-            - npm install -g pnpm
-            - pnpm install
+            - npm ci --no-audit --no-fund
         build:
           commands:
-            - pnpm build
+            - npm run build
       artifacts:
         baseDirectory: build # or build (depends on your app)
         files:
