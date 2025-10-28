@@ -1,0 +1,18 @@
+version: 1
+applications:
+  - frontend:
+      phases:
+        preBuild:
+          commands:
+            - npm install -g pnpm
+            - pnpm install
+        build:
+          commands:
+            - pnpm build
+      artifacts:
+        baseDirectory: dist # or build (depends on your app)
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - node_modules/**/*
