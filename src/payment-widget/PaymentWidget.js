@@ -149,7 +149,12 @@ export default function PaymentWidget() {
 
   function emitResult(success, extra) {
     const payload = {
+      // envelope
+      version: '1.0',
+      status: success ? 'succeeded' : 'failed',
       success,
+      timestamp: new Date().toISOString(),
+      // legacy flat fields (kept for backward compatibility)
       amount: Number(amount) || 0,
       currency,
       receivedFrom,
@@ -158,11 +163,22 @@ export default function PaymentWidget() {
       paymentMethods,
       totalPayment,
       remainingDue,
+      // structured fields for richer consumers
+      totals: {
+        totalPayment,
+        remainingDue,
+      },
+      payer: {
+        receivedFrom,
+      },
+      methodsSelected: paymentMethods,
+      tenderedCurrency: currencyTendered,
       splits: {
         cash: cashSplits,
         card: cardSplits,
         cheque: chequeSplits,
       },
+      requestId: initPayload?.requestId ?? undefined,
       ...extra,
     };
     // Use wildcard origin to avoid origin mismatches in development
