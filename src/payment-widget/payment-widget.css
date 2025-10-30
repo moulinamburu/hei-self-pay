@@ -32,11 +32,13 @@
 
 /* Body */
 .pw-modal-body { 
-  padding: 12px 16px 16px; 
+  padding: 0; 
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
-  overflow: hidden;
+  max-height: 70vh;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* Balance row */
@@ -45,6 +47,13 @@
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 12px;
   margin-bottom: 12px;
+  position: sticky;
+  top: 0;
+  background: #ffffff;
+  z-index: 10;
+  padding: 16px;
+  border-bottom: 1px solid #e2e8f0;
+  
 }
 .pw-chip { border-radius: 10px; padding: 10px 12px; border: 1px solid transparent; }
 .pw-chip-amount { font-weight: 700; font-size: 14px; }
@@ -54,8 +63,35 @@
 .pw-chip-success { background: #ecfdf5; border-color: #a7f3d0; }
 .pw-chip-danger { background: #fee2e2; border-color: #fecaca; }
 
+/* Neater input appearance inside Total Payment chip */
+.pw-chip-success .pw-chip-amount { display: flex; align-items: center; }
+.pw-chip-success .pw-chip-amount .pw-input-affix { width: 100%; }
+#totalPaymentEditable {
+  border: 0;
+  background: transparent;
+  font-weight: 700;
+  font-size: 14px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+  cursor: text;
+}
+#totalPaymentEditable:focus { outline: none; }
+#totalPaymentEditable::placeholder { color: #94a3b8; }
+
+/* Pencil suffix inside affix container */
+.pw-input-affix .pw-suffix {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  opacity: 0.6;
+}
+.pw-input-affix:focus-within .pw-suffix { opacity: 1; }
+.pw-chip-success:focus-within { box-shadow: inset 0 0 0 2px #a7f3d0; }
+
 /* Sections */
-.pw-section { border-top: 1px solid #e2e8f0; padding-top: 12px; margin-top: 12px; }
+.pw-section { padding: 16px; margin-top: 12px; }
 .pw-section-title, .pw-section-subtitle {
   font-size: 12px;
   color: #475569;
@@ -297,6 +333,33 @@
 .pw-btn-secondary:hover { 
   background: #f8fafc; 
   border-color: #94a3b8;
+}
+
+.pw-pos-button-container {
+  margin: 12px 0;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.pw-btn-pos {
+  background: #10b981;
+  color: #ffffff;
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 14px;
+  min-width: 100px;
+}
+
+.pw-btn-pos:hover { 
+  background: #059669; 
+}
+
+.pw-btn-pos:disabled { 
+  opacity: 0.6; 
+  cursor: not-allowed; 
 }
 
 /* Debug */
