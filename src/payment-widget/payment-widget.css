@@ -4,11 +4,14 @@
   background: #ffffff;
   color: #0f172a;
   width: 100%;
+  height: 100vh;
   max-width: 720px;
   border-radius: 12px;
   box-shadow: 0 10px 30px rgba(2, 6, 23, 0.08);
   border: 1px solid #e2e8f0;
   margin: 0 auto;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Header */
@@ -36,7 +39,7 @@
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
-  max-height: 70vh;
+  flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -93,10 +96,10 @@
 /* Sections */
 .pw-section { padding: 16px; margin-top: 12px; }
 .pw-section-title, .pw-section-subtitle {
-  font-size: 12px;
+  font-size: 14px;
   color: #475569;
   font-weight: 600;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
 
 /* Form layout */

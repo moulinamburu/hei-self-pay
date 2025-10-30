@@ -344,7 +344,7 @@ export default function PaymentWidget() {
   }
 
   return (
-    <div className="pw-modal">
+    <div className="pw-modal" style={{ width: '100%' }}>
       <div className="pw-modal-header">
         <div className="pw-modal-title">Make payment</div>
       </div>
