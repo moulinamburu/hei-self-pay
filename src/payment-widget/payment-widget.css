@@ -58,24 +58,29 @@
   border-bottom: 1px solid #e2e8f0;
   
 }
-.pw-chip { border-radius: 10px; padding: 10px 12px; border: 1px solid transparent; }
-.pw-chip-amount { font-weight: 700; font-size: 14px; }
-.pw-chip-label { font-size: 12px; color: #475569; }
+.pw-chip { border-radius: 10px; padding: 8px 12px; border: 1px solid transparent; }
+.pw-chip-amount { font-weight: 700; font-size: 14px; margin: 0; padding: 0; text-align: left; }
+.pw-chip-label { font-size: 12px; color: #475569; margin-top: 4px; padding: 0; text-align: left; }
 .pw-chip-info { background: #eff6ff; border-color: #bfdbfe; }
+.pw-chip-info .pw-chip-amount { padding-left: 12px; }
+.pw-chip-info .pw-chip-label { padding-left: 12px; }
 .pw-chip-warn { background: #fefce8; border-color: #fde68a; }
+.pw-chip-warn .pw-chip-amount { padding-left: 12px; }
+.pw-chip-warn .pw-chip-label { padding-left: 12px; }
 .pw-chip-success { background: #ecfdf5; border-color: #a7f3d0; }
 .pw-chip-danger { background: #fee2e2; border-color: #fecaca; }
 
 /* Neater input appearance inside Total Payment chip */
 .pw-chip-success .pw-chip-amount { display: flex; align-items: center; }
 .pw-chip-success .pw-chip-amount .pw-input-affix { width: 100%; }
+.pw-chip-success .pw-chip-label { padding-left: 12px; text-align: left; }
 #totalPaymentEditable {
   border: 0;
   background: transparent;
   font-weight: 700;
   font-size: 14px;
-  padding-top: 6px;
-  padding-bottom: 6px;
+  padding-top: 0;
+  padding-bottom: 0;
   cursor: text;
 }
 #totalPaymentEditable:focus { outline: none; }

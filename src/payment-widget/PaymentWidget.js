@@ -34,6 +34,9 @@ export default function PaymentWidget() {
   const [changeDue, setChangeDue] = useState('0.00');
   const [submitting, setSubmitting] = useState(false);
   const [submitAttempted, setSubmitAttempted] = useState(false);
+  const [totalPaymentInputValue, setTotalPaymentInputValue] = useState('');
+  const [isTotalPaymentFocused, setIsTotalPaymentFocused] = useState(false);
+  const [manualTotalPayment, setManualTotalPayment] = useState(null); // null means using split-based calculation
   const [touched, setTouched] = useState({
     receivedFrom: false,
     currencyTendered: false,
@@ -60,13 +63,18 @@ export default function PaymentWidget() {
   const queryParams = useMemo(() => new URLSearchParams(window.location.search), []);
   const isZero = useMemo(() => Number(amount || 0) === 0, [amount]);
 
+  // Use currencyTendered if set, otherwise fall back to currency
+  const displayCurrency = useMemo(() => (currencyTendered?.trim() || currency).toUpperCase(), [currencyTendered, currency]);
+
   const sumSplitAmounts = React.useCallback((splits) => splits.reduce((sum, s) => sum + (Number(s.amount) || 0), 0), []);
   const cashTotal = useMemo(() => sumSplitAmounts(cashSplits), [sumSplitAmounts, cashSplits]);
   const cardTotal = useMemo(() => sumSplitAmounts(cardSplits), [sumSplitAmounts, cardSplits]);
   const chequeTotal = useMemo(() => sumSplitAmounts(chequeSplits), [sumSplitAmounts, chequeSplits]);
-  const totalPayment = useMemo(() => cashTotal + cardTotal + chequeTotal, [cashTotal, cardTotal, chequeTotal]);
+  const splitBasedTotal = useMemo(() => cashTotal + cardTotal + chequeTotal, [cashTotal, cardTotal, chequeTotal]);
+  // Use manual total payment if set, otherwise use split-based calculation
+  const totalPayment = useMemo(() => manualTotalPayment !== null ? Number(manualTotalPayment) || 0 : splitBasedTotal, [manualTotalPayment, splitBasedTotal]);
 
-  const formatCurrency = React.useCallback((amt) => `${currency}${(Number(amt) || 0).toLocaleString()}`,[currency]);
+  const formatCurrency = React.useCallback((amt) => `${displayCurrency}${(Number(amt) || 0).toLocaleString()}`, [displayCurrency]);
   const displayTotalPayment = useMemo(() => formatCurrency(totalPayment), [formatCurrency, totalPayment]);
   const displayTotalDue = useMemo(() => formatCurrency(amount || 0), [formatCurrency, amount]);
   const remainingDue = useMemo(() => Math.max((Number(amount || 0) || 0) - totalPayment, 0), [amount, totalPayment]);
@@ -83,6 +91,7 @@ export default function PaymentWidget() {
     const change = Math.max(cashTotal - remainingBeforeCash, 0);
     setChangeDue(change.toFixed(2));
   }, [amount, cashTotal, cardTotal, chequeTotal]);
+
 
   // Allow host to pass init via URL for static hosting fallback
   useEffect(() => {
@@ -307,12 +316,25 @@ export default function PaymentWidget() {
     });
   }
 
+  // Format amount to 2 decimal places
+  function formatAmount(value) {
+    if (!value || value === '') return '';
+    const num = Number(value);
+    if (isNaN(num)) return value;
+    return num.toFixed(2);
+  }
+
   // Split helpers
   function addCashSplit() {
     setCashSplits(prev => [...prev, { amount: '', alias: '' }]);
   }
   function updateCashSplit(index, field, value) {
     setCashSplits(prev => prev.map((s, i) => (i === index ? { ...s, [field]: value } : s)));
+  }
+  function handleCashAmountBlur(index) {
+    setCashSplits(prev => prev.map((s, i) =>
+      i === index && s.amount ? { ...s, amount: formatAmount(s.amount) } : s
+    ));
   }
 
   function addCardSplit() {
@@ -321,6 +343,11 @@ export default function PaymentWidget() {
   function updateCardSplit(index, field, value) {
     setCardSplits(prev => prev.map((s, i) => (i === index ? { ...s, [field]: value } : s)));
   }
+  function handleCardAmountBlur(index) {
+    setCardSplits(prev => prev.map((s, i) =>
+      i === index && s.amount ? { ...s, amount: formatAmount(s.amount) } : s
+    ));
+  }
 
   function addChequeSplit() {
     setChequeSplits(prev => [...prev, { amount: '', alias: '' }]);
@@ -328,19 +355,51 @@ export default function PaymentWidget() {
   function updateChequeSplit(index, field, value) {
     setChequeSplits(prev => prev.map((s, i) => (i === index ? { ...s, [field]: value } : s)));
   }
+  function handleChequeAmountBlur(index) {
+    setChequeSplits(prev => prev.map((s, i) =>
+      i === index && s.amount ? { ...s, amount: formatAmount(s.amount) } : s
+    ));
+  }
 
-  // Allow direct editing of Total Payment by replacing splits with a single Cash split
+  // Allow direct editing of Total Payment - this becomes the target amount to distribute
   function handleTotalPaymentInputChange(e) {
     const raw = e.target.value || '';
     // Keep only digits and dot, limit to one dot
     const sanitized = raw
       .replace(/[^0-9.]/g, '')
       .replace(/(\..*)\./g, '$1');
-    // Update methods and splits to reflect a single Cash entry
-    setPaymentMethods(['Cash']);
-    setCashSplits([{ amount: sanitized, alias: '' }]);
-    setCardSplits([]);
-    setChequeSplits([]);
+
+    setTotalPaymentInputValue(sanitized);
+    // Set manual total payment as the user types
+    if (sanitized === '') {
+      setManualTotalPayment(null);
+    } else {
+      setManualTotalPayment(sanitized);
+    }
+  }
+  function handleTotalPaymentFocus() {
+    setIsTotalPaymentFocused(true);
+    // When focusing, use the current totalPayment if no input value is set
+    if (!totalPaymentInputValue && totalPayment > 0) {
+      setTotalPaymentInputValue(String(totalPayment));
+    }
+    // If manual total payment was set, show it
+    if (manualTotalPayment !== null) {
+      setTotalPaymentInputValue(String(manualTotalPayment));
+    }
+  }
+  function handleTotalPaymentBlur() {
+    setIsTotalPaymentFocused(false);
+    // Format the value and set as manual total payment
+    const valueToFormat = totalPaymentInputValue || '';
+    const formattedValue = valueToFormat ? formatAmount(valueToFormat) : '';
+
+    if (formattedValue) {
+      setManualTotalPayment(formattedValue);
+    } else {
+      setManualTotalPayment(null);
+    }
+    setTotalPaymentInputValue('');
   }
 
   return (
@@ -351,7 +410,39 @@ export default function PaymentWidget() {
 
       <div className="pw-modal-body">
         <div className="pw-balance-row">
-          {!isZero && (
+          <div className="pw-chip pw-chip-success">
+            <div className="pw-chip-amount">
+              <div className="pw-input-affix">
+                <span className="pw-affix">{displayCurrency}</span>
+                <input
+                  id="totalPaymentEditable"
+                  className="pw-input pw-input-affixed"
+                  type="text"
+                  value={
+                    isTotalPaymentFocused || totalPaymentInputValue
+                      ? (totalPaymentInputValue || '')
+                      : totalPayment > 0
+                        ? formatAmount(totalPayment)
+                        : ''
+                  }
+                  onChange={handleTotalPaymentInputChange}
+                  onFocus={handleTotalPaymentFocus}
+                  onBlur={handleTotalPaymentBlur}
+                  placeholder="0.00"
+                  aria-label="Edit total payment"
+                  title="Click to edit total payment"
+                />
+                <span className="pw-suffix" aria-hidden="true">
+                  <svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M3 13.5V17h3.5L16.06 7.44l-3.5-3.5L3 13.5z" fill="#0f172a" fillOpacity="0.55" />
+                    <path d="M17.71 6.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.15 1.15 3.5 3.5 1.4-1.4z" fill="#0f172a" fillOpacity="0.55" />
+                  </svg>
+                </span>
+              </div>
+            </div>
+            <div className="pw-chip-label">Total Payment</div>
+          </div>
+          {true && (
             <>
               <div className="pw-chip pw-chip-info">
                 <div className="pw-chip-amount">{displayTotalDue}</div>
@@ -363,30 +454,6 @@ export default function PaymentWidget() {
               </div>
             </>
           )}
-          <div className="pw-chip pw-chip-success">
-            <div className="pw-chip-amount">
-              <div className="pw-input-affix">
-                <span className="pw-affix">{currency}</span>
-                <input
-                  id="totalPaymentEditable"
-                  className="pw-input pw-input-affixed"
-                  type="text"
-                  value={String(totalPayment || '')}
-                  onChange={handleTotalPaymentInputChange}
-                  placeholder="0.00"
-                  aria-label="Edit total payment"
-                  title="Click to edit total payment"
-                />
-                  <span className="pw-suffix" aria-hidden="true">
-                    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M3 13.5V17h3.5L16.06 7.44l-3.5-3.5L3 13.5z" fill="#0f172a" fillOpacity="0.55"/>
-                      <path d="M17.71 6.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.15 1.15 3.5 3.5 1.4-1.4z" fill="#0f172a" fillOpacity="0.55"/>
-                    </svg>
-                  </span>
-              </div>
-            </div>
-            <div className="pw-chip-label">Total Payment</div>
-          </div>
         </div>
         {shouldShowRemainingDueError && (
           <div className="pw-error">Please pay the full amount</div>
@@ -445,7 +512,7 @@ export default function PaymentWidget() {
 
             {/* Payment Method Section */}
             <div className="pw-section-subtitle">Payment method</div>
-            
+
             <div className="pw-payment-methods">
               <div className="pw-radio-group">
                 <label className="pw-checkbox-label">
@@ -468,7 +535,7 @@ export default function PaymentWidget() {
                         <div className="pw-field">
                           <label htmlFor={`cashAmount-${idx}`} className="pw-label">Enter amount</label>
                           <div className="pw-input-affix">
-                            <span className="pw-affix">AED</span>
+                            <span className="pw-affix">{displayCurrency}</span>
                             <input
                               id={`cashAmount-${idx}`}
                               className="pw-input pw-input-affixed"
@@ -477,6 +544,7 @@ export default function PaymentWidget() {
                               step="0.01"
                               value={split.amount}
                               onChange={(e) => updateCashSplit(idx, 'amount', e.target.value)}
+                              onBlur={() => handleCashAmountBlur(idx)}
                               placeholder="0"
                             />
                           </div>
@@ -491,9 +559,9 @@ export default function PaymentWidget() {
                         <div className="pw-field">
                           <label htmlFor={`cashAlias-${idx}`} className="pw-label">Payment alias</label>
                           <div className="pw-select">
-                            <select 
+                            <select
                               id={`cashAlias-${idx}`}
-                              className="pw-input" 
+                              className="pw-input"
                               value={split.alias}
                               onChange={(e) => updateCashSplit(idx, 'alias', e.target.value)}
                             >
@@ -502,7 +570,7 @@ export default function PaymentWidget() {
                               <option value="cash2">Cash *5678</option>
                             </select>
                             <svg className="pw-caret" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M4 6L8 10L12 6" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                              <path d="M4 6L8 10L12 6" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                             </svg>
                           </div>
                           {submitAttempted && fieldErrors.cashAliases[idx] && (
@@ -519,7 +587,7 @@ export default function PaymentWidget() {
                         id="changeDue"
                         className="pw-input pw-input-readonly"
                         type="text"
-                        value={`AED ${changeDue}`}
+                        value={`${displayCurrency} ${changeDue}`}
                         readOnly
                       />
                     </div>
@@ -546,7 +614,7 @@ export default function PaymentWidget() {
                         <div className="pw-field">
                           <label htmlFor={`cardAmount-${idx}`} className="pw-label">Enter amount</label>
                           <div className="pw-input-affix">
-                            <span className="pw-affix">AED</span>
+                            <span className="pw-affix">{displayCurrency}</span>
                             <input
                               id={`cardAmount-${idx}`}
                               className="pw-input pw-input-affixed"
@@ -555,6 +623,7 @@ export default function PaymentWidget() {
                               step="0.01"
                               value={split.amount}
                               onChange={(e) => updateCardSplit(idx, 'amount', e.target.value)}
+                              onBlur={() => handleCardAmountBlur(idx)}
                               placeholder="0"
                             />
                           </div>
@@ -564,14 +633,21 @@ export default function PaymentWidget() {
                           {isZero && idx === cardSplits.length - 1 && (
                             <button type="button" className="pw-link-btn" onClick={addCardSplit}>+ Add</button>
                           )}
+                          {isZero && idx === cardSplits.length - 1 && (
+                            <div className="pw-pos-button-container">
+                              <button type="button" className="pw-btn pw-btn-pos">
+                                POS
+                              </button>
+                            </div>
+                          )}
                         </div>
 
                         <div className="pw-field">
                           <label htmlFor={`paymentAlias-${idx}`} className="pw-label">Payment alias</label>
                           <div className="pw-select">
-                            <select 
+                            <select
                               id={`paymentAlias-${idx}`}
-                              className="pw-input" 
+                              className="pw-input"
                               value={split.alias}
                               onChange={(e) => updateCardSplit(idx, 'alias', e.target.value)}
                             >
@@ -580,7 +656,7 @@ export default function PaymentWidget() {
                               <option value="mastercard1">Mastercard *5678</option>
                             </select>
                             <svg className="pw-caret" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M4 6L8 10L12 6" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                              <path d="M4 6L8 10L12 6" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                             </svg>
                           </div>
                           {submitAttempted && fieldErrors.cardAliases[idx] && (
@@ -596,13 +672,14 @@ export default function PaymentWidget() {
                         <label htmlFor="cardNumber" className="pw-label">Card number</label>
                         <input
                           id="cardNumber"
-                          className="pw-input"
+                          className="pw-input pw-input-readonly"
                           type="text"
                           value={cardNumber}
                           onChange={(e) => setCardNumber(e.target.value)}
                           onBlur={() => { setTouched(prev => ({ ...prev, cardNumber: true })); setFieldErrors(validateAll()); }}
                           placeholder="1234 5678 9012 3456"
                           maxLength="19"
+                          readOnly
                         />
                         {(touched.cardNumber || submitAttempted) && fieldErrors.cardNumber && (
                           <div className="pw-error">{fieldErrors.cardNumber}</div>
@@ -613,13 +690,14 @@ export default function PaymentWidget() {
                         <label htmlFor="expiry" className="pw-label">Expiry</label>
                         <input
                           id="expiry"
-                          className="pw-input"
+                          className="pw-input pw-input-readonly"
                           type="text"
                           value={expiry}
                           onChange={(e) => setExpiry(e.target.value)}
                           onBlur={() => { setTouched(prev => ({ ...prev, expiry: true })); setFieldErrors(validateAll()); }}
                           placeholder="MM/YY"
                           maxLength="5"
+                          readOnly
                         />
                         {(touched.expiry || submitAttempted) && fieldErrors.expiry && (
                           <div className="pw-error">{fieldErrors.expiry}</div>
@@ -630,25 +708,18 @@ export default function PaymentWidget() {
                         <label htmlFor="cvv" className="pw-label">Authorization Number</label>
                         <input
                           id="cvv"
-                          className="pw-input"
+                          className="pw-input pw-input-readonly"
                           type="password"
                           value={cvv}
                           onChange={(e) => setCvv(e.target.value)}
                           onBlur={() => { setTouched(prev => ({ ...prev, cvv: true })); setFieldErrors(validateAll()); }}
-                          placeholder="Enter authorization number"
                           maxLength="4"
+                          readOnly
                         />
                         {(touched.cvv || submitAttempted) && fieldErrors.cvv && (
                           <div className="pw-error">{fieldErrors.cvv}</div>
                         )}
                       </div>
-                    </div>
-
-                    {/* Show POS Button */}
-                    <div className="pw-pos-button-container">
-                      <button type="button" className="pw-btn pw-btn-pos">
-                        Show POS
-                      </button>
                     </div>
                   </div>
                 )}
@@ -673,7 +744,7 @@ export default function PaymentWidget() {
                         <div className="pw-field">
                           <label htmlFor={`chequeAmount-${idx}`} className="pw-label">Enter amount</label>
                           <div className="pw-input-affix">
-                            <span className="pw-affix">AED</span>
+                            <span className="pw-affix">{displayCurrency}</span>
                             <input
                               id={`chequeAmount-${idx}`}
                               className="pw-input pw-input-affixed"
@@ -682,6 +753,7 @@ export default function PaymentWidget() {
                               step="0.01"
                               value={split.amount}
                               onChange={(e) => updateChequeSplit(idx, 'amount', e.target.value)}
+                              onBlur={() => handleChequeAmountBlur(idx)}
                               placeholder="0"
                             />
                           </div>
@@ -696,9 +768,9 @@ export default function PaymentWidget() {
                         <div className="pw-field">
                           <label htmlFor={`chequeAlias-${idx}`} className="pw-label">Payment alias</label>
                           <div className="pw-select">
-                            <select 
+                            <select
                               id={`chequeAlias-${idx}`}
-                              className="pw-input" 
+                              className="pw-input"
                               value={split.alias}
                               onChange={(e) => updateChequeSplit(idx, 'alias', e.target.value)}
                             >
@@ -707,7 +779,7 @@ export default function PaymentWidget() {
                               <option value="cheque2">Cheque *5678</option>
                             </select>
                             <svg className="pw-caret" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M4 6L8 10L12 6" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                              <path d="M4 6L8 10L12 6" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                             </svg>
                           </div>
                           {submitAttempted && fieldErrors.chequeAliases[idx] && (
@@ -748,7 +820,7 @@ export default function PaymentWidget() {
                   </div>
                 )}
 
-               
+
               </div>
             </div>
 
@@ -772,13 +844,6 @@ export default function PaymentWidget() {
             </div>
           </form>
         </div>
-
-        {initPayload && (
-          <div className="pw-debug">
-            <div className="pw-debug-title">Init payload</div>
-            <pre>{JSON.stringify(initPayload, null, 2)}</pre>
-          </div>
-        )}
       </div>
     </div>
   );

@@ -8,7 +8,7 @@ import PaymentWidget from './payment-widget/PaymentWidget';
 const root = ReactDOM.createRoot(document.getElementById('root'));
 
 // Lightweight routing without adding a router: render widget for "/widget" path.
-const isWidgetRoute = window.location.pathname === '/widget';
+const isWidgetRoute = window.location.pathname === '/selfpay-remittance';
 
 root.render(
   <React.StrictMode>
