@@ -19,7 +19,7 @@ export default function PaymentWidget() {
   const [amount, setAmount] = useState('');
   const [currency, setCurrency] = useState('AED');
   const [receivedFrom, setReceivedFrom] = useState('');
-  const [currencyTendered, setCurrencyTendered] = useState('');
+  const [currencyTendered, setCurrencyTendered] = useState('AED');
   const [description, setDescription] = useState('');
   const [paymentMethods, setPaymentMethods] = useState([]);
   // Split rows per payment method
@@ -61,7 +61,12 @@ export default function PaymentWidget() {
   const parentOriginRef = useRef(ORIGIN_ANY);
 
   const queryParams = useMemo(() => new URLSearchParams(window.location.search), []);
-  const isZero = useMemo(() => Number(amount || 0) === 0, [amount]);
+  // Target amount to be paid: prefer manual total payment if provided, else initial amount
+  const targetTotalDue = useMemo(
+    () => (manualTotalPayment !== null ? (Number(manualTotalPayment) || 0) : (Number(amount || 0) || 0)),
+    [manualTotalPayment, amount]
+  );
+  const isZero = useMemo(() => Number(targetTotalDue) === 0, [targetTotalDue]);
 
   // Use currencyTendered if set, otherwise fall back to currency
   const displayCurrency = useMemo(() => (currencyTendered?.trim() || currency).toUpperCase(), [currencyTendered, currency]);
@@ -71,26 +76,27 @@ export default function PaymentWidget() {
   const cardTotal = useMemo(() => sumSplitAmounts(cardSplits), [sumSplitAmounts, cardSplits]);
   const chequeTotal = useMemo(() => sumSplitAmounts(chequeSplits), [sumSplitAmounts, chequeSplits]);
   const splitBasedTotal = useMemo(() => cashTotal + cardTotal + chequeTotal, [cashTotal, cardTotal, chequeTotal]);
-  // Use manual total payment if set, otherwise use split-based calculation
-  const totalPayment = useMemo(() => manualTotalPayment !== null ? Number(manualTotalPayment) || 0 : splitBasedTotal, [manualTotalPayment, splitBasedTotal]);
+  // Actual allocated total from payment details (splits)
+  const allocatedTotal = useMemo(() => splitBasedTotal, [splitBasedTotal]);
 
   const formatCurrency = React.useCallback((amt) => `${displayCurrency}${(Number(amt) || 0).toLocaleString()}`, [displayCurrency]);
-  const displayTotalPayment = useMemo(() => formatCurrency(totalPayment), [formatCurrency, totalPayment]);
-  const displayTotalDue = useMemo(() => formatCurrency(amount || 0), [formatCurrency, amount]);
-  const remainingDue = useMemo(() => Math.max((Number(amount || 0) || 0) - totalPayment, 0), [amount, totalPayment]);
+  const displayTotalPayment = useMemo(() => formatCurrency(targetTotalDue), [formatCurrency, targetTotalDue]);
+  const displayTotalDue = useMemo(() => formatCurrency(targetTotalDue), [formatCurrency, targetTotalDue]);
+  // Remaining due should be target due minus allocated (from splits)
+  const remainingDue = useMemo(() => Math.max((Number(targetTotalDue) || 0) - (Number(allocatedTotal) || 0), 0), [targetTotalDue, allocatedTotal]);
   const displayRemainingDue = useMemo(() => formatCurrency(remainingDue), [formatCurrency, remainingDue]);
   const shouldShowRemainingDueError = useMemo(
-    () => remainingDue > 0 && (submitAttempted || totalPayment > 0),
-    [remainingDue, submitAttempted, totalPayment]
+    () => remainingDue > 0 && (submitAttempted || allocatedTotal > 0),
+    [remainingDue, submitAttempted, allocatedTotal]
   );
 
   useEffect(() => {
-    const totalDueNum = Number(amount || 0) || 0;
+    const totalDueNum = Number(targetTotalDue) || 0;
     const nonCashPaid = cardTotal + chequeTotal;
     const remainingBeforeCash = Math.max(totalDueNum - nonCashPaid, 0);
     const change = Math.max(cashTotal - remainingBeforeCash, 0);
     setChangeDue(change.toFixed(2));
-  }, [amount, cashTotal, cardTotal, chequeTotal]);
+  }, [targetTotalDue, cashTotal, cardTotal, chequeTotal]);
 
 
   // Allow host to pass init via URL for static hosting fallback
@@ -104,7 +110,7 @@ export default function PaymentWidget() {
         if (parsed.payableAmount != null) setAmount(String(parsed.payableAmount));
         if (parsed.currency) setCurrency(parsed.currency);
         if (parsed.receivedFrom) setReceivedFrom(parsed.receivedFrom);
-        if (parsed.currencyTendered) setCurrencyTendered(parsed.currencyTendered);
+        // Keep currency tendered fixed to AED; ignore external override
         if (parsed.description) setDescription(parsed.description);
         if ((parsed.payableAmount != null && Number(parsed.payableAmount) === 0) || (parsed.amount != null && Number(parsed.amount) === 0)) {
           setPaymentMethods(prev => (prev.includes('Credit card') ? prev : ['Credit card']));
@@ -136,7 +142,7 @@ export default function PaymentWidget() {
         if (payload?.payableAmount != null) setAmount(String(payload.payableAmount));
         if (payload?.currency) setCurrency(payload.currency);
         if (payload?.receivedFrom) setReceivedFrom(payload.receivedFrom);
-        if (payload?.currencyTendered) setCurrencyTendered(payload.currencyTendered);
+        // Keep currency tendered fixed to AED; ignore external override
         if (payload?.description) setDescription(payload.description);
         // If payableAmount is 0, ensure a default method is visible so +Add is shown
         const incoming = payload?.payableAmount ?? payload?.amount;
@@ -164,17 +170,18 @@ export default function PaymentWidget() {
       success,
       timestamp: new Date().toISOString(),
       // legacy flat fields (kept for backward compatibility)
-      amount: Number(amount) || 0,
+      amount: Number(targetTotalDue) || 0,
       currency,
       receivedFrom,
       currencyTendered,
       description,
       paymentMethods,
-      totalPayment,
+      totalPayment: Number(allocatedTotal) || 0,
       remainingDue,
       // structured fields for richer consumers
       totals: {
-        totalPayment,
+        totalDue: Number(targetTotalDue) || 0,
+        allocatedTotal: Number(allocatedTotal) || 0,
         remainingDue,
       },
       payer: {
@@ -222,7 +229,7 @@ export default function PaymentWidget() {
     };
 
     if (!receivedFrom) errs.receivedFrom = 'Required';
-    if (!currencyTendered) errs.currencyTendered = 'Required';
+    // currency tendered is fixed to AED; no validation needed
 
     if (paymentMethods.includes('Cash')) {
       errs.cashAliases = cashSplits.map(s => (s.alias ? '' : 'Select a payment alias'));
@@ -260,7 +267,7 @@ export default function PaymentWidget() {
     const amountArrays = [...(errs.cashAmounts || []), ...(errs.cardAmounts || []), ...(errs.chequeAmounts || [])];
     return Boolean(
       errs.receivedFrom ||
-      errs.currencyTendered ||
+      // currencyTendered is fixed; no error contribution
       errs.cardNumber ||
       errs.expiry ||
       errs.cvv ||
@@ -380,8 +387,8 @@ export default function PaymentWidget() {
   function handleTotalPaymentFocus() {
     setIsTotalPaymentFocused(true);
     // When focusing, use the current totalPayment if no input value is set
-    if (!totalPaymentInputValue && totalPayment > 0) {
-      setTotalPaymentInputValue(String(totalPayment));
+    if (!totalPaymentInputValue && targetTotalDue > 0) {
+      setTotalPaymentInputValue(String(targetTotalDue));
     }
     // If manual total payment was set, show it
     if (manualTotalPayment !== null) {
@@ -421,8 +428,8 @@ export default function PaymentWidget() {
                   value={
                     isTotalPaymentFocused || totalPaymentInputValue
                       ? (totalPaymentInputValue || '')
-                      : totalPayment > 0
-                        ? formatAmount(totalPayment)
+                      : targetTotalDue > 0
+                        ? formatAmount(targetTotalDue)
                         : ''
                   }
                   onChange={handleTotalPaymentInputChange}
@@ -484,16 +491,13 @@ export default function PaymentWidget() {
                 <label htmlFor="currencyTendered" className="pw-label">Currency tendered</label>
                 <input
                   id="currencyTendered"
-                  className="pw-input"
+                  className="pw-input pw-input-readonly"
                   type="text"
                   value={currencyTendered}
-                  onChange={(e) => setCurrencyTendered(e.target.value)}
-                  onBlur={() => { setTouched(prev => ({ ...prev, currencyTendered: true })); setFieldErrors(validateAll()); }}
-                  placeholder="e.g., AED, USD, EUR"
+                  readOnly
+                  placeholder="AED"
+                  title="Currency tendered is fixed to AED"
                 />
-                {(touched.currencyTendered || submitAttempted) && fieldErrors.currencyTendered && (
-                  <div className="pw-error">{fieldErrors.currencyTendered}</div>
-                )}
               </div>
             </div>
 
