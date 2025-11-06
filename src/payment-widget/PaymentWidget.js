@@ -22,6 +22,7 @@ export default function PaymentWidget() {
   const [currencyTendered, setCurrencyTendered] = useState('AED');
   const [description, setDescription] = useState('');
   const [paymentMethods, setPaymentMethods] = useState([]);
+  const [transactionAliases, setTransactionAliases] = useState([]); // [{ value: string, label: string }]
   // Split rows per payment method
   const [cashSplits, setCashSplits] = useState([]); // [{ amount: string, alias: string }]
   const [cardSplits, setCardSplits] = useState([]); // [{ amount: string, alias: string }]
@@ -144,6 +145,10 @@ export default function PaymentWidget() {
         if (payload?.receivedFrom) setReceivedFrom(payload.receivedFrom);
         // Keep currency tendered fixed to AED; ignore external override
         if (payload?.description) setDescription(payload.description);
+        // Set transaction aliases if provided
+        if (payload?.transactionAliases && Array.isArray(payload.transactionAliases)) {
+          setTransactionAliases(payload.transactionAliases);
+        }
         // If payableAmount is 0, ensure a default method is visible so +Add is shown
         const incoming = payload?.payableAmount ?? payload?.amount;
         if (incoming != null && Number(incoming) === 0) {
@@ -193,6 +198,15 @@ export default function PaymentWidget() {
         cash: cashSplits,
         card: cardSplits,
         cheque: chequeSplits,
+      },
+      // Additional payment details for API integration
+      paymentDetails: {
+        cardNumber: cardNumber,
+        expiry: expiry,
+        cvv: cvv,
+        chequeNumber: chequeNumber,
+        chequeDate: chequeDate,
+        changeDue: Number(changeDue) || 0,
       },
       requestId: initPayload?.requestId ?? undefined,
       ...extra,
@@ -570,8 +584,11 @@ export default function PaymentWidget() {
                               onChange={(e) => updateCashSplit(idx, 'alias', e.target.value)}
                             >
                               <option value="">Select</option>
-                              <option value="cash1">Cash *1234</option>
-                              <option value="cash2">Cash *5678</option>
+                              {transactionAliases.map((alias) => (
+                                <option key={alias.value} value={alias.value}>
+                                  {alias.label}
+                                </option>
+                              ))}
                             </select>
                             <svg className="pw-caret" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                               <path d="M4 6L8 10L12 6" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -656,8 +673,11 @@ export default function PaymentWidget() {
                               onChange={(e) => updateCardSplit(idx, 'alias', e.target.value)}
                             >
                               <option value="">Select</option>
-                              <option value="visa1">VISA *1234</option>
-                              <option value="mastercard1">Mastercard *5678</option>
+                              {transactionAliases.map((alias) => (
+                                <option key={alias.value} value={alias.value}>
+                                  {alias.label}
+                                </option>
+                              ))}
                             </select>
                             <svg className="pw-caret" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                               <path d="M4 6L8 10L12 6" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -779,8 +799,11 @@ export default function PaymentWidget() {
                               onChange={(e) => updateChequeSplit(idx, 'alias', e.target.value)}
                             >
                               <option value="">Select</option>
-                              <option value="cheque1">Cheque *1234</option>
-                              <option value="cheque2">Cheque *5678</option>
+                              {transactionAliases.map((alias) => (
+                                <option key={alias.value} value={alias.value}>
+                                  {alias.label}
+                                </option>
+                              ))}
                             </select>
                             <svg className="pw-caret" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                               <path d="M4 6L8 10L12 6" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
