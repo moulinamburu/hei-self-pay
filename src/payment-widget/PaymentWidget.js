@@ -382,6 +382,17 @@ export default function PaymentWidget() {
     ));
   }
 
+  function handleChequeDateChange(e) {
+    let value = e.target.value.replace(/\D/g, ''); // Remove non-digits
+    if (value.length >= 2) {
+      value = value.slice(0, 2) + '/' + value.slice(2);
+    }
+    if (value.length >= 5) {
+      value = value.slice(0, 5) + '/' + value.slice(5, 9);
+    }
+    setChequeDate(value);
+  }
+
   // Allow direct editing of Total Payment - this becomes the target amount to distribute
   function handleTotalPaymentInputChange(e) {
     const raw = e.target.value || '';
@@ -654,7 +665,7 @@ export default function PaymentWidget() {
                           {isZero && idx === cardSplits.length - 1 && (
                             <button type="button" className="pw-link-btn" onClick={addCardSplit}>+ Add</button>
                           )}
-                          {isZero && idx === cardSplits.length - 1 && (
+                          {idx === cardSplits.length - 1 && (
                             <div className="pw-pos-button-container">
                               <button type="button" className="pw-btn pw-btn-pos">
                                 POS
@@ -838,9 +849,9 @@ export default function PaymentWidget() {
                           className="pw-input"
                           type="text"
                           value={chequeDate}
-                          onChange={(e) => setChequeDate(e.target.value)}
-                          placeholder="MM/DD"
-                          maxLength="5"
+                          onChange={handleChequeDateChange}
+                          placeholder="MM/DD/YYYY"
+                          maxLength="10"
                         />
                       </div>
                     </div>
