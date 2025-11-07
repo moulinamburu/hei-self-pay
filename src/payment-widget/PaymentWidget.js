@@ -864,14 +864,14 @@ export default function PaymentWidget() {
 
             {/* Actions */}
             <div className="pw-actions">
-              <button
+              {/* <button
                 type="button"
                 className="pw-btn pw-btn-secondary"
                 onClick={handleCancel}
                 disabled={submitting}
               >
                 Cancel
-              </button>
+              </button> */}
               <button
                 type="submit"
                 className="pw-btn"
