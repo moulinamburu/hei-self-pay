@@ -37,6 +37,7 @@ export default function PaymentWidget() {
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [totalPaymentInputValue, setTotalPaymentInputValue] = useState('');
   const [isTotalPaymentFocused, setIsTotalPaymentFocused] = useState(false);
+  const [isCardNumberFocused, setIsCardNumberFocused] = useState(false);
   const [manualTotalPayment, setManualTotalPayment] = useState(null); // null means using split-based calculation
   const [touched, setTouched] = useState({
     receivedFrom: false,
@@ -60,6 +61,7 @@ export default function PaymentWidget() {
     remainingDue: '',
   });
   const parentOriginRef = useRef(ORIGIN_ANY);
+  const totalPaymentInputRef = useRef(null);
 
   const queryParams = useMemo(() => new URLSearchParams(window.location.search), []);
   // Target amount to be paid: prefer manual total payment if provided, else initial amount
@@ -167,6 +169,13 @@ export default function PaymentWidget() {
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
+  // Auto-focus total payment input when amount is zero
+  useEffect(() => {
+    if (isZero && totalPaymentInputRef.current) {
+      totalPaymentInputRef.current.focus();
+    }
+  }, [isZero]);
+
   function emitResult(success, extra) {
     const payload = {
       // envelope
@@ -256,9 +265,9 @@ export default function PaymentWidget() {
     if (paymentMethods.includes('Credit card')) {
       errs.cardAliases = cardSplits.map(s => (s.alias ? '' : 'Select a payment alias'));
       errs.cardAmounts = cardSplits.map(s => (s.amount !== '' && Number(s.amount) <= 0 ? 'Amount should be greater than 0' : ''));
-      const digits = (cardNumber || '').replace(/\s+/g, '');
-      if (!digits) errs.cardNumber = 'Enter card number';
-      else if (!/^\d{12,19}$/.test(digits)) errs.cardNumber = 'Enter a valid card number';
+      const digits = (cardNumber || '').replace(/\D/g, '');
+      if (!digits) errs.cardNumber = 'Enter last 4 digits of card';
+      else if (!/^\d{4}$/.test(digits)) errs.cardNumber = 'Enter exactly 4 digits';
 
       if (!expiry) errs.expiry = 'Enter expiry';
       else if (!/^(0[1-9]|1[0-2])\/\d{2}$/.test(expiry)) errs.expiry = 'Enter valid MM/YY';
@@ -393,6 +402,27 @@ export default function PaymentWidget() {
     setChequeDate(value);
   }
 
+  function handleExpiryChange(e) {
+    let value = e.target.value.replace(/\D/g, ''); // Remove non-digits
+    if (value.length >= 2) {
+      value = value.slice(0, 2) + '/' + value.slice(2, 4);
+    }
+    setExpiry(value);
+  }
+
+  function handleCardNumberChange(e) {
+    // Only accept digits and limit to 4 digits (last 4 of card)
+    let value = e.target.value.replace(/\D/g, '');
+    value = value.slice(0, 4);
+    setCardNumber(value);
+  }
+
+  function formatCardNumberDisplay(lastFour) {
+    if (!lastFour) return '';
+    // Display as **** **** **** 1234
+    return `**** **** **** ${lastFour}`;
+  }
+
   // Allow direct editing of Total Payment - this becomes the target amount to distribute
   function handleTotalPaymentInputChange(e) {
     const raw = e.target.value || '';
@@ -435,18 +465,19 @@ export default function PaymentWidget() {
   }
 
   return (
-    <div className="pw-modal" style={{ width: '100%' }}>
+    <div className="pw-modal" style={{ width: '100%', position: 'relative' }}>
       <div className="pw-modal-header">
         <div className="pw-modal-title">Make payment</div>
       </div>
 
-      <div className="pw-modal-body">
+      <div className="pw-modal-body" style={{ position: 'relative' }}>
         <div className="pw-balance-row">
           <div className="pw-chip pw-chip-success">
             <div className="pw-chip-amount">
               <div className="pw-input-affix">
                 <span className="pw-affix">{displayCurrency}</span>
                 <input
+                  ref={totalPaymentInputRef}
                   id="totalPaymentEditable"
                   className="pw-input pw-input-affixed"
                   type="text"
@@ -491,396 +522,416 @@ export default function PaymentWidget() {
           <div className="pw-error">Please pay the full amount</div>
         )}
 
+        {/* Toast notification when total payment is 0 */}
+        {isZero && (
+          <div className="pw-toast" style={{
+            position: 'absolute',
+            bottom: '20px',
+            right: '20px',
+            padding: '12px 16px',
+            backgroundColor: '#fff3cd',
+            border: '1px solid #ffc107',
+            borderRadius: '8px',
+            color: '#856404',
+            fontSize: '14px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            maxWidth: '400px',
+            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06)',
+            zIndex: 1000
+          }}>
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
+              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+            <span><strong>Please enter the total payment amount</strong> to proceed with payment details.</span>
+          </div>
+        )}
+
         <div className="pw-section">
-          <div className="pw-section-title">Payment details</div>
-          <form className="pw-form" onSubmit={handleSubmit}>
-            {/* Received From and Currency Tendered */}
-            <div className="pw-form-row">
-              <div className="pw-field">
-                <label htmlFor="receivedFrom" className="pw-label">Received from</label>
-                <input
-                  id="receivedFrom"
-                  className="pw-input"
-                  type="text"
-                  value={receivedFrom}
-                  onChange={(e) => setReceivedFrom(e.target.value)}
-                  onBlur={() => { setTouched(prev => ({ ...prev, receivedFrom: true })); setFieldErrors(validateAll()); }}
-                  placeholder="e.g., Patient, Insurance, or name"
-                />
-                {(touched.receivedFrom || submitAttempted) && fieldErrors.receivedFrom && (
-                  <div className="pw-error">{fieldErrors.receivedFrom}</div>
-                )}
-              </div>
+          {!isZero && (
+            <>
+              <div className="pw-section-title">Payment details</div>
+              <form className="pw-form" onSubmit={handleSubmit}>
+                {/* Received From and Currency Tendered */}
+                <div className="pw-form-row">
+                  <div className="pw-field">
+                    <label htmlFor="receivedFrom" className="pw-label">Received from</label>
+                    <input
+                      id="receivedFrom"
+                      className="pw-input"
+                      type="text"
+                      value={receivedFrom}
+                      onChange={(e) => setReceivedFrom(e.target.value)}
+                      onBlur={() => { setTouched(prev => ({ ...prev, receivedFrom: true })); setFieldErrors(validateAll()); }}
+                      placeholder="e.g., Patient, Insurance, or name"
+                    />
+                    {(touched.receivedFrom || submitAttempted) && fieldErrors.receivedFrom && (
+                      <div className="pw-error">{fieldErrors.receivedFrom}</div>
+                    )}
+                  </div>
+                </div>
 
-              <div className="pw-field">
-                <label htmlFor="currencyTendered" className="pw-label">Currency tendered</label>
-                <input
-                  id="currencyTendered"
-                  className="pw-input pw-input-readonly"
-                  type="text"
-                  value={currencyTendered}
-                  readOnly
-                  placeholder="AED"
-                  title="Currency tendered is fixed to AED"
-                />
-              </div>
-            </div>
-
-            {/* Description */}
-            <div className="pw-field">
-              <label htmlFor="description" className="pw-label">Description</label>
-              <textarea
-                id="description"
-                className="pw-textarea"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Write description here"
-                rows="3"
-              />
-            </div>
-
-            {/* Payment Method Section */}
-            <div className="pw-section-subtitle">Payment method</div>
-
-            <div className="pw-payment-methods">
-              <div className="pw-radio-group">
-                <label className="pw-checkbox-label">
-                  <input
-                    type="checkbox"
-                    name="paymentMethod"
-                    value="Cash"
-                    checked={paymentMethods.includes('Cash')}
-                    onChange={() => handlePaymentMethodToggle('Cash')}
+                {/* Description */}
+                <div className="pw-field">
+                  <label htmlFor="description" className="pw-label">Description</label>
+                  <textarea
+                    id="description"
+                    className="pw-textarea"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Write description here"
+                    rows="3"
                   />
-                  <span className="pw-checkbox-text">Cash</span>
-                </label>
+                </div>
 
-                {/* Cash Details Section */}
-                {paymentMethods.includes('Cash') && (
-                  <div className="pw-credit-card-details-inline">
-                    {/* Split rows: Enter Amount and Payment Alias side by side */}
-                    {cashSplits.map((split, idx) => (
-                      <div className="pw-form-row" key={`cash-split-${idx}`}>
-                        <div className="pw-field">
-                          <label htmlFor={`cashAmount-${idx}`} className="pw-label">Enter amount</label>
-                          <div className="pw-input-affix">
-                            <span className="pw-affix">{displayCurrency}</span>
-                            <input
-                              id={`cashAmount-${idx}`}
-                              className="pw-input pw-input-affixed"
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={split.amount}
-                              onChange={(e) => updateCashSplit(idx, 'amount', e.target.value)}
-                              onBlur={() => handleCashAmountBlur(idx)}
-                              placeholder="0"
-                            />
-                          </div>
-                          {((submitAttempted && fieldErrors.cashAmounts[idx]) || (split.amount !== '' && Number(split.amount) === 0)) && (
-                            <div className="pw-error">{fieldErrors.cashAmounts[idx] || 'Amount should be greater than 0'}</div>
-                          )}
-                          {isZero && idx === cashSplits.length - 1 && (
-                            <button type="button" className="pw-link-btn" onClick={addCashSplit}>+ Add</button>
-                          )}
-                        </div>
+                {/* Payment Method Section */}
+                <div className="pw-section-subtitle">Payment method</div>
 
-                        <div className="pw-field">
-                          <label htmlFor={`cashAlias-${idx}`} className="pw-label">Payment alias</label>
-                          <div className="pw-select">
-                            <select
-                              id={`cashAlias-${idx}`}
-                              className="pw-input"
-                              value={split.alias}
-                              onChange={(e) => updateCashSplit(idx, 'alias', e.target.value)}
-                            >
-                              <option value="">Select</option>
-                              {transactionAliases.map((alias) => (
-                                <option key={alias.value} value={alias.value}>
-                                  {alias.label}
-                                </option>
-                              ))}
-                            </select>
-                            <svg className="pw-caret" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M4 6L8 10L12 6" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
-                          </div>
-                          {submitAttempted && fieldErrors.cashAliases[idx] && (
-                            <div className="pw-error">{fieldErrors.cashAliases[idx]}</div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-
-                    {/* Change Due Field */}
-                    <div className="pw-field">
-                      <label htmlFor="changeDue" className="pw-label">Change due</label>
+                <div className="pw-payment-methods">
+                  <div className="pw-radio-group">
+                    <label className="pw-checkbox-label">
                       <input
-                        id="changeDue"
-                        className="pw-input pw-input-readonly"
-                        type="text"
-                        value={`${displayCurrency} ${changeDue}`}
-                        readOnly
+                        type="checkbox"
+                        name="paymentMethod"
+                        value="Cash"
+                        checked={paymentMethods.includes('Cash')}
+                        onChange={() => handlePaymentMethodToggle('Cash')}
                       />
-                    </div>
-                  </div>
-                )}
+                      <span className="pw-checkbox-text">Cash</span>
+                    </label>
 
-                <label className="pw-checkbox-label">
-                  <input
-                    type="checkbox"
-                    name="paymentMethod"
-                    value="Credit card"
-                    checked={paymentMethods.includes('Credit card')}
-                    onChange={() => handlePaymentMethodToggle('Credit card')}
-                  />
-                  <span className="pw-checkbox-text">Credit card</span>
-                </label>
-
-                {/* Credit Card Details Section */}
-                {paymentMethods.includes('Credit card') && (
-                  <div className="pw-credit-card-details-inline">
-                    {/* Split rows: Enter Amount and Payment Alias side by side */}
-                    {cardSplits.map((split, idx) => (
-                      <div className="pw-form-row" key={`card-split-${idx}`}>
-                        <div className="pw-field">
-                          <label htmlFor={`cardAmount-${idx}`} className="pw-label">Enter amount</label>
-                          <div className="pw-input-affix">
-                            <span className="pw-affix">{displayCurrency}</span>
-                            <input
-                              id={`cardAmount-${idx}`}
-                              className="pw-input pw-input-affixed"
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={split.amount}
-                              onChange={(e) => updateCardSplit(idx, 'amount', e.target.value)}
-                              onBlur={() => handleCardAmountBlur(idx)}
-                              placeholder="0"
-                            />
-                          </div>
-                          {((submitAttempted && fieldErrors.cardAmounts[idx]) || (split.amount !== '' && Number(split.amount) === 0)) && (
-                            <div className="pw-error">{fieldErrors.cardAmounts[idx] || 'Amount should be greater than 0'}</div>
-                          )}
-                          {isZero && idx === cardSplits.length - 1 && (
-                            <button type="button" className="pw-link-btn" onClick={addCardSplit}>+ Add</button>
-                          )}
-                          {idx === cardSplits.length - 1 && (
-                            <div className="pw-pos-button-container">
-                              <button type="button" className="pw-btn pw-btn-pos">
-                                POS
-                              </button>
+                    {/* Cash Details Section */}
+                    {paymentMethods.includes('Cash') && (
+                      <div className="pw-credit-card-details-inline">
+                        {/* Split rows: Enter Amount and Payment Alias side by side */}
+                        {cashSplits.map((split, idx) => (
+                          <div className="pw-form-row" key={`cash-split-${idx}`}>
+                            <div className="pw-field">
+                              <label htmlFor={`cashAmount-${idx}`} className="pw-label">Enter amount</label>
+                              <div className="pw-input-affix">
+                                <span className="pw-affix">{displayCurrency}</span>
+                                <input
+                                  id={`cashAmount-${idx}`}
+                                  className="pw-input pw-input-affixed"
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={split.amount}
+                                  onChange={(e) => updateCashSplit(idx, 'amount', e.target.value)}
+                                  onBlur={() => handleCashAmountBlur(idx)}
+                                  placeholder="0"
+                                />
+                              </div>
+                              {((submitAttempted && fieldErrors.cashAmounts[idx]) || (split.amount !== '' && Number(split.amount) === 0)) && (
+                                <div className="pw-error">{fieldErrors.cashAmounts[idx] || 'Amount should be greater than 0'}</div>
+                              )}
+                              {isZero && idx === cashSplits.length - 1 && (
+                                <button type="button" className="pw-link-btn" onClick={addCashSplit}>+ Add</button>
+                              )}
                             </div>
-                          )}
-                        </div>
 
-                        <div className="pw-field">
-                          <label htmlFor={`paymentAlias-${idx}`} className="pw-label">Payment alias</label>
-                          <div className="pw-select">
-                            <select
-                              id={`paymentAlias-${idx}`}
-                              className="pw-input"
-                              value={split.alias}
-                              onChange={(e) => updateCardSplit(idx, 'alias', e.target.value)}
-                            >
-                              <option value="">Select</option>
-                              {transactionAliases.map((alias) => (
-                                <option key={alias.value} value={alias.value}>
-                                  {alias.label}
-                                </option>
-                              ))}
-                            </select>
-                            <svg className="pw-caret" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M4 6L8 10L12 6" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
+                            <div className="pw-field">
+                              <label htmlFor={`cashAlias-${idx}`} className="pw-label">Payment alias</label>
+                              <div className="pw-select">
+                                <select
+                                  id={`cashAlias-${idx}`}
+                                  className="pw-input"
+                                  value={split.alias}
+                                  onChange={(e) => updateCashSplit(idx, 'alias', e.target.value)}
+                                >
+                                  <option value="">Select</option>
+                                  {transactionAliases.map((alias) => (
+                                    <option key={alias.value} value={alias.value}>
+                                      {alias.label}
+                                    </option>
+                                  ))}
+                                </select>
+                                <svg className="pw-caret" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                  <path d="M4 6L8 10L12 6" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                              </div>
+                              {submitAttempted && fieldErrors.cashAliases[idx] && (
+                                <div className="pw-error">{fieldErrors.cashAliases[idx]}</div>
+                              )}
+                            </div>
                           </div>
-                          {submitAttempted && fieldErrors.cardAliases[idx] && (
-                            <div className="pw-error">{fieldErrors.cardAliases[idx]}</div>
-                          )}
+                        ))}
+
+                        {/* Change Due Field */}
+                        <div className="pw-field">
+                          <label htmlFor="changeDue" className="pw-label">Change due</label>
+                          <input
+                            id="changeDue"
+                            className="pw-input pw-input-readonly"
+                            type="text"
+                            value={`${displayCurrency} ${changeDue}`}
+                            readOnly
+                          />
                         </div>
                       </div>
-                    ))}
+                    )}
 
-                    {/* Second Row: Card Number, Expiry, and CVV */}
-                    <div className="pw-form-row pw-form-row-three">
-                      <div className="pw-field">
-                        <label htmlFor="cardNumber" className="pw-label">Card number</label>
-                        <input
-                          id="cardNumber"
-                          className="pw-input pw-input-readonly"
-                          type="text"
-                          value={cardNumber}
-                          onChange={(e) => setCardNumber(e.target.value)}
-                          onBlur={() => { setTouched(prev => ({ ...prev, cardNumber: true })); setFieldErrors(validateAll()); }}
-                          placeholder="1234 5678 9012 3456"
-                          maxLength="19"
-                          readOnly
-                        />
-                        {(touched.cardNumber || submitAttempted) && fieldErrors.cardNumber && (
-                          <div className="pw-error">{fieldErrors.cardNumber}</div>
-                        )}
-                      </div>
+                    <label className="pw-checkbox-label">
+                      <input
+                        type="checkbox"
+                        name="paymentMethod"
+                        value="Credit card"
+                        checked={paymentMethods.includes('Credit card')}
+                        onChange={() => handlePaymentMethodToggle('Credit card')}
+                      />
+                      <span className="pw-checkbox-text">Credit card</span>
+                    </label>
 
-                      <div className="pw-field">
-                        <label htmlFor="expiry" className="pw-label">Expiry</label>
-                        <input
-                          id="expiry"
-                          className="pw-input pw-input-readonly"
-                          type="text"
-                          value={expiry}
-                          onChange={(e) => setExpiry(e.target.value)}
-                          onBlur={() => { setTouched(prev => ({ ...prev, expiry: true })); setFieldErrors(validateAll()); }}
-                          placeholder="MM/YY"
-                          maxLength="5"
-                          readOnly
-                        />
-                        {(touched.expiry || submitAttempted) && fieldErrors.expiry && (
-                          <div className="pw-error">{fieldErrors.expiry}</div>
-                        )}
-                      </div>
+                    {/* Credit Card Details Section */}
+                    {paymentMethods.includes('Credit card') && (
+                      <div className="pw-credit-card-details-inline">
+                        {/* Split rows: Enter Amount and Payment Alias side by side */}
+                        {cardSplits.map((split, idx) => (
+                          <div className="pw-form-row" key={`card-split-${idx}`}>
+                            <div className="pw-field">
+                              <label htmlFor={`cardAmount-${idx}`} className="pw-label">Enter amount</label>
+                              <div className="pw-input-affix">
+                                <span className="pw-affix">{displayCurrency}</span>
+                                <input
+                                  id={`cardAmount-${idx}`}
+                                  className="pw-input pw-input-affixed"
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={split.amount}
+                                  onChange={(e) => updateCardSplit(idx, 'amount', e.target.value)}
+                                  onBlur={() => handleCardAmountBlur(idx)}
+                                  placeholder="0"
+                                />
+                              </div>
+                              {((submitAttempted && fieldErrors.cardAmounts[idx]) || (split.amount !== '' && Number(split.amount) === 0)) && (
+                                <div className="pw-error">{fieldErrors.cardAmounts[idx] || 'Amount should be greater than 0'}</div>
+                              )}
+                              {isZero && idx === cardSplits.length - 1 && (
+                                <button type="button" className="pw-link-btn" onClick={addCardSplit}>+ Add</button>
+                              )}
+                              {idx === cardSplits.length - 1 && (
+                                <div className="pw-pos-button-container">
+                                  <button type="button" className="pw-btn pw-btn-pos">
+                                    POS
+                                  </button>
+                                </div>
+                              )}
+                            </div>
 
-                      <div className="pw-field">
-                        <label htmlFor="cvv" className="pw-label">Authorization Number</label>
-                        <input
-                          id="cvv"
-                          className="pw-input pw-input-readonly"
-                          type="password"
-                          value={cvv}
-                          onChange={(e) => setCvv(e.target.value)}
-                          onBlur={() => { setTouched(prev => ({ ...prev, cvv: true })); setFieldErrors(validateAll()); }}
-                          maxLength="4"
-                          readOnly
-                        />
-                        {(touched.cvv || submitAttempted) && fieldErrors.cvv && (
-                          <div className="pw-error">{fieldErrors.cvv}</div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
+                            <div className="pw-field">
+                              <label htmlFor={`paymentAlias-${idx}`} className="pw-label">Payment alias</label>
+                              <div className="pw-select">
+                                <select
+                                  id={`paymentAlias-${idx}`}
+                                  className="pw-input"
+                                  value={split.alias}
+                                  onChange={(e) => updateCardSplit(idx, 'alias', e.target.value)}
+                                >
+                                  <option value="">Select</option>
+                                  {transactionAliases.map((alias) => (
+                                    <option key={alias.value} value={alias.value}>
+                                      {alias.label}
+                                    </option>
+                                  ))}
+                                </select>
+                                <svg className="pw-caret" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                  <path d="M4 6L8 10L12 6" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                              </div>
+                              {submitAttempted && fieldErrors.cardAliases[idx] && (
+                                <div className="pw-error">{fieldErrors.cardAliases[idx]}</div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
 
-                <label className="pw-checkbox-label">
-                  <input
-                    type="checkbox"
-                    name="paymentMethod"
-                    value="Cheque"
-                    checked={paymentMethods.includes('Cheque')}
-                    onChange={() => handlePaymentMethodToggle('Cheque')}
-                  />
-                  <span className="pw-checkbox-text">Cheque</span>
-                </label>
-
-                {/* Cheque Details Section */}
-                {paymentMethods.includes('Cheque') && (
-                  <div className="pw-credit-card-details-inline">
-                    {/* Split rows: Enter Amount and Payment Alias side by side */}
-                    {chequeSplits.map((split, idx) => (
-                      <div className="pw-form-row" key={`cheque-split-${idx}`}>
-                        <div className="pw-field">
-                          <label htmlFor={`chequeAmount-${idx}`} className="pw-label">Enter amount</label>
-                          <div className="pw-input-affix">
-                            <span className="pw-affix">{displayCurrency}</span>
+                        {/* Second Row: Card Number, Expiry, and CVV */}
+                        <div className="pw-form-row pw-form-row-three">
+                          <div className="pw-field">
+                            <label htmlFor="cardNumber" className="pw-label">Card number (Last 4 digits)</label>
                             <input
-                              id={`chequeAmount-${idx}`}
-                              className="pw-input pw-input-affixed"
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={split.amount}
-                              onChange={(e) => updateChequeSplit(idx, 'amount', e.target.value)}
-                              onBlur={() => handleChequeAmountBlur(idx)}
-                              placeholder="0"
+                              id="cardNumber"
+                              className="pw-input"
+                              type="text"
+                              value={isCardNumberFocused ? cardNumber : (cardNumber ? formatCardNumberDisplay(cardNumber) : '')}
+                              onChange={handleCardNumberChange}
+                              onFocus={() => {
+                                setIsCardNumberFocused(true);
+                              }}
+                              onBlur={() => { 
+                                setIsCardNumberFocused(false);
+                                setTouched(prev => ({ ...prev, cardNumber: true })); 
+                                setFieldErrors(validateAll()); 
+                              }}
+                              placeholder="**** **** **** 1234"
+                              maxLength="4"
+                            />
+                            {(touched.cardNumber || submitAttempted) && fieldErrors.cardNumber && (
+                              <div className="pw-error">{fieldErrors.cardNumber}</div>
+                            )}
+                          </div>
+
+                          <div className="pw-field">
+                            <label htmlFor="expiry" className="pw-label">Expiry</label>
+                            <input
+                              id="expiry"
+                              className="pw-input"
+                              type="text"
+                              value={expiry}
+                              onChange={handleExpiryChange}
+                              onBlur={() => { setTouched(prev => ({ ...prev, expiry: true })); setFieldErrors(validateAll()); }}
+                              placeholder="MM/YY"
+                              maxLength="5"
+                            />
+                            {(touched.expiry || submitAttempted) && fieldErrors.expiry && (
+                              <div className="pw-error">{fieldErrors.expiry}</div>
+                            )}
+                          </div>
+
+                          <div className="pw-field">
+                            <label htmlFor="cvv" className="pw-label">Authorization Number</label>
+                            <input
+                              id="cvv"
+                              className="pw-input"
+                              type="password"
+                              value={cvv}
+                              onChange={(e) => setCvv(e.target.value)}
+                              onBlur={() => { setTouched(prev => ({ ...prev, cvv: true })); setFieldErrors(validateAll()); }}
+                              maxLength="4"
+                            />
+                            {(touched.cvv || submitAttempted) && fieldErrors.cvv && (
+                              <div className="pw-error">{fieldErrors.cvv}</div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    <label className="pw-checkbox-label">
+                      <input
+                        type="checkbox"
+                        name="paymentMethod"
+                        value="Cheque"
+                        checked={paymentMethods.includes('Cheque')}
+                        onChange={() => handlePaymentMethodToggle('Cheque')}
+                      />
+                      <span className="pw-checkbox-text">Cheque</span>
+                    </label>
+
+                    {/* Cheque Details Section */}
+                    {paymentMethods.includes('Cheque') && (
+                      <div className="pw-credit-card-details-inline">
+                        {/* Split rows: Enter Amount and Payment Alias side by side */}
+                        {chequeSplits.map((split, idx) => (
+                          <div className="pw-form-row" key={`cheque-split-${idx}`}>
+                            <div className="pw-field">
+                              <label htmlFor={`chequeAmount-${idx}`} className="pw-label">Enter amount</label>
+                              <div className="pw-input-affix">
+                                <span className="pw-affix">{displayCurrency}</span>
+                                <input
+                                  id={`chequeAmount-${idx}`}
+                                  className="pw-input pw-input-affixed"
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={split.amount}
+                                  onChange={(e) => updateChequeSplit(idx, 'amount', e.target.value)}
+                                  onBlur={() => handleChequeAmountBlur(idx)}
+                                  placeholder="0"
+                                />
+                              </div>
+                              {((submitAttempted && fieldErrors.chequeAmounts[idx]) || (split.amount !== '' && Number(split.amount) === 0)) && (
+                                <div className="pw-error">{fieldErrors.chequeAmounts[idx] || 'Amount should be greater than 0'}</div>
+                              )}
+                              {isZero && idx === chequeSplits.length - 1 && (
+                                <button type="button" className="pw-link-btn" onClick={addChequeSplit}>+ Add</button>
+                              )}
+                            </div>
+
+                            <div className="pw-field">
+                              <label htmlFor={`chequeAlias-${idx}`} className="pw-label">Payment alias</label>
+                              <div className="pw-select">
+                                <select
+                                  id={`chequeAlias-${idx}`}
+                                  className="pw-input"
+                                  value={split.alias}
+                                  onChange={(e) => updateChequeSplit(idx, 'alias', e.target.value)}
+                                >
+                                  <option value="">Select</option>
+                                  {transactionAliases.map((alias) => (
+                                    <option key={alias.value} value={alias.value}>
+                                      {alias.label}
+                                    </option>
+                                  ))}
+                                </select>
+                                <svg className="pw-caret" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                  <path d="M4 6L8 10L12 6" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                              </div>
+                              {submitAttempted && fieldErrors.chequeAliases[idx] && (
+                                <div className="pw-error">{fieldErrors.chequeAliases[idx]}</div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+
+                        {/* Second Row: Cheque Number and Cheque Date */}
+                        <div className="pw-form-row">
+                          <div className="pw-field">
+                            <label htmlFor="chequeNumber" className="pw-label">Cheque Number</label>
+                            <input
+                              id="chequeNumber"
+                              className="pw-input"
+                              type="text"
+                              value={chequeNumber}
+                              onChange={(e) => setChequeNumber(e.target.value)}
+                              placeholder="000000"
+                              maxLength="20"
                             />
                           </div>
-                          {((submitAttempted && fieldErrors.chequeAmounts[idx]) || (split.amount !== '' && Number(split.amount) === 0)) && (
-                            <div className="pw-error">{fieldErrors.chequeAmounts[idx] || 'Amount should be greater than 0'}</div>
-                          )}
-                          {isZero && idx === chequeSplits.length - 1 && (
-                            <button type="button" className="pw-link-btn" onClick={addChequeSplit}>+ Add</button>
-                          )}
-                        </div>
 
-                        <div className="pw-field">
-                          <label htmlFor={`chequeAlias-${idx}`} className="pw-label">Payment alias</label>
-                          <div className="pw-select">
-                            <select
-                              id={`chequeAlias-${idx}`}
+                          <div className="pw-field">
+                            <label htmlFor="chequeDate" className="pw-label">Cheque date</label>
+                            <input
+                              id="chequeDate"
                               className="pw-input"
-                              value={split.alias}
-                              onChange={(e) => updateChequeSplit(idx, 'alias', e.target.value)}
-                            >
-                              <option value="">Select</option>
-                              {transactionAliases.map((alias) => (
-                                <option key={alias.value} value={alias.value}>
-                                  {alias.label}
-                                </option>
-                              ))}
-                            </select>
-                            <svg className="pw-caret" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M4 6L8 10L12 6" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
+                              type="text"
+                              value={chequeDate}
+                              onChange={handleChequeDateChange}
+                              placeholder="MM/DD/YYYY"
+                              maxLength="10"
+                            />
                           </div>
-                          {submitAttempted && fieldErrors.chequeAliases[idx] && (
-                            <div className="pw-error">{fieldErrors.chequeAliases[idx]}</div>
-                          )}
                         </div>
                       </div>
-                    ))}
+                    )}
 
-                    {/* Second Row: Cheque Number and Cheque Date */}
-                    <div className="pw-form-row">
-                      <div className="pw-field">
-                        <label htmlFor="chequeNumber" className="pw-label">Cheque Number</label>
-                        <input
-                          id="chequeNumber"
-                          className="pw-input"
-                          type="text"
-                          value={chequeNumber}
-                          onChange={(e) => setChequeNumber(e.target.value)}
-                          placeholder="000000"
-                          maxLength="20"
-                        />
-                      </div>
-
-                      <div className="pw-field">
-                        <label htmlFor="chequeDate" className="pw-label">Cheque date</label>
-                        <input
-                          id="chequeDate"
-                          className="pw-input"
-                          type="text"
-                          value={chequeDate}
-                          onChange={handleChequeDateChange}
-                          placeholder="MM/DD/YYYY"
-                          maxLength="10"
-                        />
-                      </div>
-                    </div>
                   </div>
-                )}
+                </div>
 
-
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="pw-actions">
-              {/* <button
-                type="button"
-                className="pw-btn pw-btn-secondary"
-                onClick={handleCancel}
-                disabled={submitting}
-              >
-                Cancel
-              </button> */}
-              <button
-                type="submit"
-                className="pw-btn"
-                disabled={submitting || remainingDue > 0}
-              >
-                {submitting ? 'Processing…' : 'Submit'}
-              </button>
-            </div>
-          </form>
+                {/* Actions */}
+                <div className="pw-actions">
+                  {/* <button
+                    type="button"
+                    className="pw-btn pw-btn-secondary"
+                    onClick={handleCancel}
+                    disabled={submitting}
+                  >
+                    Cancel
+                  </button> */}
+                  <button
+                    type="submit"
+                    className="pw-btn"
+                    disabled={submitting || remainingDue > 0}
+                  >
+                    {submitting ? 'Processing…' : 'Submit'}
+                  </button>
+                </div>
+              </form>
+            </>
+          )}
         </div>
       </div>
     </div>
