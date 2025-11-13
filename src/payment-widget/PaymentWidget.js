@@ -115,10 +115,6 @@ export default function PaymentWidget() {
         if (parsed.receivedFrom) setReceivedFrom(parsed.receivedFrom);
         // Keep currency tendered fixed to AED; ignore external override
         if (parsed.description) setDescription(parsed.description);
-        if ((parsed.payableAmount != null && Number(parsed.payableAmount) === 0) || (parsed.amount != null && Number(parsed.amount) === 0)) {
-          setPaymentMethods(prev => (prev.includes('Credit card') ? prev : ['Credit card']));
-          setCardSplits(prev => (prev.length > 0 ? prev : [{ amount: '', alias: '' }]));
-        }
       }
     }
   }, [queryParams]);
@@ -151,12 +147,6 @@ export default function PaymentWidget() {
         if (payload?.transactionAliases && Array.isArray(payload.transactionAliases)) {
           setTransactionAliases(payload.transactionAliases);
         }
-        // If payableAmount is 0, ensure a default method is visible so +Add is shown
-        const incoming = payload?.payableAmount ?? payload?.amount;
-        if (incoming != null && Number(incoming) === 0) {
-          setPaymentMethods(prev => (prev.includes('Credit card') ? prev : ['Credit card']));
-          setCardSplits(prev => (prev.length > 0 ? prev : [{ amount: '', alias: '' }]));
-        }
       }
       if (type === 'CANCEL') {
         post('CANCELLED', { reason: 'host_cancelled' });
@@ -168,13 +158,6 @@ export default function PaymentWidget() {
     post('READY', { version: '1.0.0' });
     return () => window.removeEventListener('message', handleMessage);
   }, []);
-
-  // Auto-focus total payment input when amount is zero
-  useEffect(() => {
-    if (isZero && totalPaymentInputRef.current) {
-      totalPaymentInputRef.current.focus();
-    }
-  }, [isZero]);
 
   function emitResult(success, extra) {
     const payload = {
@@ -441,13 +424,11 @@ export default function PaymentWidget() {
   }
   function handleTotalPaymentFocus() {
     setIsTotalPaymentFocused(true);
-    // When focusing, use the current totalPayment if no input value is set
-    if (!totalPaymentInputValue && targetTotalDue > 0) {
-      setTotalPaymentInputValue(String(targetTotalDue));
-    }
-    // If manual total payment was set, show it
+    // When focusing, populate input value based on current state
     if (manualTotalPayment !== null) {
       setTotalPaymentInputValue(String(manualTotalPayment));
+    } else if (targetTotalDue > 0) {
+      setTotalPaymentInputValue(String(targetTotalDue));
     }
   }
   function handleTotalPaymentBlur() {
@@ -482,11 +463,11 @@ export default function PaymentWidget() {
                   className="pw-input pw-input-affixed"
                   type="text"
                   value={
-                    isTotalPaymentFocused || totalPaymentInputValue
-                      ? (totalPaymentInputValue || '')
-                      : targetTotalDue > 0
-                        ? formatAmount(targetTotalDue)
-                        : ''
+                    isTotalPaymentFocused
+                      ? totalPaymentInputValue
+                      : (manualTotalPayment !== null
+                          ? formatAmount(manualTotalPayment)
+                          : (targetTotalDue > 0 ? formatAmount(targetTotalDue) : ''))
                   }
                   onChange={handleTotalPaymentInputChange}
                   onFocus={handleTotalPaymentFocus}
