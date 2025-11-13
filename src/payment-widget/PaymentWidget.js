@@ -257,7 +257,6 @@ export default function PaymentWidget() {
       else if (isExpiredMmYy(expiry)) errs.expiry = 'Card expired';
 
       if (!cvv) errs.cvv = 'Enter authorization number';
-      else if (!/^\d{3,4}$/.test(cvv)) errs.cvv = 'Enter valid authorization number';
     }
 
     // Block if remaining due is greater than zero (underpayment)
@@ -776,11 +775,10 @@ export default function PaymentWidget() {
                             <input
                               id="cvv"
                               className="pw-input"
-                              type="password"
+                              type="text"
                               value={cvv}
                               onChange={(e) => setCvv(e.target.value)}
                               onBlur={() => { setTouched(prev => ({ ...prev, cvv: true })); setFieldErrors(validateAll()); }}
-                              maxLength="4"
                             />
                             {(touched.cvv || submitAttempted) && fieldErrors.cvv && (
                               <div className="pw-error">{fieldErrors.cvv}</div>
