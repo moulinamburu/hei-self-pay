@@ -64,6 +64,8 @@ export default function PaymentWidget() {
   const totalPaymentInputRef = useRef(null);
 
   const queryParams = useMemo(() => new URLSearchParams(window.location.search), []);
+  // Check if this is a refund operation
+  const isRefund = useMemo(() => queryParams.get('isRefund') === 'true', [queryParams]);
   // Target amount to be paid: prefer manual total payment if provided, else initial amount
   const targetTotalDue = useMemo(
     () => (manualTotalPayment !== null ? (Number(manualTotalPayment) || 0) : (Number(amount || 0) || 0)),
@@ -447,7 +449,7 @@ export default function PaymentWidget() {
   return (
     <div className="pw-modal" style={{ width: '100%', position: 'relative' }}>
       <div className="pw-modal-header">
-        <div className="pw-modal-title">Make payment</div>
+        <div className="pw-modal-title">{isRefund ? 'Process refund' : 'Make payment'}</div>
       </div>
 
       <div className="pw-modal-body" style={{ position: 'relative' }}>
@@ -472,8 +474,8 @@ export default function PaymentWidget() {
                   onFocus={handleTotalPaymentFocus}
                   onBlur={handleTotalPaymentBlur}
                   placeholder="0.00"
-                  aria-label="Edit total payment"
-                  title="Click to edit total payment"
+                  aria-label={isRefund ? "Edit total refund" : "Edit total payment"}
+                  title={isRefund ? "Click to edit total refund" : "Click to edit total payment"}
                 />
                 <span className="pw-suffix" aria-hidden="true">
                   <svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -483,7 +485,7 @@ export default function PaymentWidget() {
                 </span>
               </div>
             </div>
-            <div className="pw-chip-label">Total Payment</div>
+            <div className="pw-chip-label">{isRefund ? 'Total Refund' : 'Total Payment'}</div>
           </div>
           {true && (
             <>
@@ -524,14 +526,14 @@ export default function PaymentWidget() {
             <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
               <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
             </svg>
-            <span><strong>Please enter the total payment amount</strong> to proceed with payment details.</span>
+            <span><strong>Please enter the total {isRefund ? 'refund' : 'payment'} amount</strong> to proceed with {isRefund ? 'refund' : 'payment'} details.</span>
           </div>
         )}
 
         <div className="pw-section">
           {!isZero && (
             <>
-              <div className="pw-section-title">Payment details</div>
+              <div className="pw-section-title">{isRefund ? 'Refund details' : 'Payment details'}</div>
               <form className="pw-form" onSubmit={handleSubmit}>
                 {/* Received From and Currency Tendered */}
                 <div className="pw-form-row">
@@ -566,7 +568,7 @@ export default function PaymentWidget() {
                 </div>
 
                 {/* Payment Method Section */}
-                <div className="pw-section-subtitle">Payment method</div>
+                <div className="pw-section-subtitle">{isRefund ? 'Refund method' : 'Payment method'}</div>
 
                 <div className="pw-payment-methods">
                   <div className="pw-radio-group">
