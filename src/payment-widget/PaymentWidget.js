@@ -538,7 +538,7 @@ export default function PaymentWidget() {
                 {/* Received From and Currency Tendered */}
                 <div className="pw-form-row">
                   <div className="pw-field">
-                    <label htmlFor="receivedFrom" className="pw-label">Received from</label>
+                    <label htmlFor="receivedFrom" className="pw-label">{isRefund ? 'Payee' : 'Received from'}</label>
                     <input
                       id="receivedFrom"
                       className="pw-input"
