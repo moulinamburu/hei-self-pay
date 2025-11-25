@@ -84,7 +84,7 @@ export default function PaymentWidget() {
   // Actual allocated total from payment details (splits)
   const allocatedTotal = useMemo(() => splitBasedTotal, [splitBasedTotal]);
 
-  const formatCurrency = React.useCallback((amt) => `${displayCurrency}${(Number(amt) || 0).toLocaleString()}`, [displayCurrency]);
+  const formatCurrency = React.useCallback((amt) => `${displayCurrency}${(Number(amt) || 0).toFixed(2)}`, [displayCurrency]);
   const displayTotalPayment = useMemo(() => formatCurrency(targetTotalDue), [formatCurrency, targetTotalDue]);
   const displayTotalDue = useMemo(() => formatCurrency(targetTotalDue), [formatCurrency, targetTotalDue]);
   // Remaining due should be target due minus allocated (from splits)
