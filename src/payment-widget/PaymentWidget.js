@@ -59,6 +59,7 @@ export default function PaymentWidget() {
     cardAmounts: [],
     chequeAmounts: [],
     remainingDue: '',
+    overpayment: '',
   });
   const parentOriginRef = useRef(ORIGIN_ANY);
   const totalPaymentInputRef = useRef(null);
@@ -102,6 +103,13 @@ export default function PaymentWidget() {
     const change = Math.max(cashTotal - remainingBeforeCash, 0);
     setChangeDue(change.toFixed(2));
   }, [targetTotalDue, cashTotal, cardTotal, chequeTotal]);
+
+  // Re-validate when allocated total or target total changes to show overpayment/underpayment errors in real-time
+  useEffect(() => {
+    if (submitAttempted || allocatedTotal > 0) {
+      setFieldErrors(validateAll());
+    }
+  }, [allocatedTotal, targetTotalDue, submitAttempted]);
 
 
   // Allow host to pass init via URL for static hosting fallback
@@ -234,6 +242,7 @@ export default function PaymentWidget() {
       cardAmounts: [],
       chequeAmounts: [],
       remainingDue: '',
+      overpayment: '',
     };
 
     if (!receivedFrom) errs.receivedFrom = 'Required';
@@ -261,6 +270,11 @@ export default function PaymentWidget() {
       if (!cvv) errs.cvv = 'Enter authorization number';
     }
 
+    // Block if total payment exceeds the target amount (overpayment)
+    if (allocatedTotal > targetTotalDue) {
+      errs.overpayment = 'Total payment should not exceed the amount due';
+    }
+
     // Block if remaining due is greater than zero (underpayment)
     if (remainingDue > 0) {
       errs.remainingDue = 'Please pay the full amount';
@@ -279,6 +293,7 @@ export default function PaymentWidget() {
       errs.expiry ||
       errs.cvv ||
       errs.remainingDue ||
+      errs.overpayment ||
       aliasArrays.some(Boolean) ||
       amountArrays.some(Boolean)
     );
@@ -501,7 +516,10 @@ export default function PaymentWidget() {
           )}
         </div>
         {shouldShowRemainingDueError && (
-          <div className="pw-error">Please pay the full amount</div>
+          <div className="pw-error" style={{ padding: '0 16px' }}>Please pay the full amount</div>
+        )}
+        {fieldErrors.overpayment && (
+          <div className="pw-error" style={{ padding: '0 16px' }}>{fieldErrors.overpayment}</div>
         )}
 
         {/* Toast notification when total payment is 0 */}
@@ -905,7 +923,7 @@ export default function PaymentWidget() {
                   <button
                     type="submit"
                     className="pw-btn"
-                    disabled={submitting || remainingDue > 0}
+                    disabled={submitting || remainingDue > 0 || allocatedTotal > targetTotalDue}
                   >
                     {submitting ? 'Processing…' : 'Submit'}
                   </button>
