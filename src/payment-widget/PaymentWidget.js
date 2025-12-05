@@ -67,6 +67,11 @@ export default function PaymentWidget() {
   const queryParams = useMemo(() => new URLSearchParams(window.location.search), []);
   // Check if this is a refund operation
   const isRefund = useMemo(() => queryParams.get('isRefund') === 'true', [queryParams]);
+  // True when only Cash is selected as payment method
+  const isCashOnly = useMemo(
+    () => paymentMethods.length === 1 && paymentMethods.includes('Cash'),
+    [paymentMethods]
+  );
   // Target amount to be paid: prefer manual total payment if provided, else initial amount
   const targetTotalDue = useMemo(
     () => (manualTotalPayment !== null ? (Number(manualTotalPayment) || 0) : (Number(amount || 0) || 0)),
@@ -271,7 +276,8 @@ export default function PaymentWidget() {
     }
 
     // Block if total payment exceeds the target amount (overpayment)
-    if (allocatedTotal > targetTotalDue) {
+    // Allow overpayment only when paying with Cash alone (to support change due)
+    if (!isCashOnly && allocatedTotal > targetTotalDue) {
       errs.overpayment = 'Total payment should not exceed the amount due';
     }
 
@@ -923,7 +929,7 @@ export default function PaymentWidget() {
                   <button
                     type="submit"
                     className="pw-btn"
-                    disabled={submitting || remainingDue > 0 || allocatedTotal > targetTotalDue}
+                    disabled={submitting || remainingDue > 0 || (!isCashOnly && allocatedTotal > targetTotalDue)}
                   >
                     {submitting ? 'Processing…' : 'Submit'}
                   </button>
