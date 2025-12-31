@@ -188,7 +188,10 @@ export default function PaymentWidget() {
       currencyTendered,
       description,
       paymentMethods,
-      totalPayment: Number(allocatedTotal) || 0,
+      // totalPayment should represent the amount applied to the balance (not the tendered amount)
+      totalPayment: Number(targetTotalDue) || 0,
+      // Expose tenderedTotal for consumers that need to account for change
+      tenderedTotal: Number(allocatedTotal) || 0,
       remainingDue,
       // structured fields for richer consumers
       totals: {
