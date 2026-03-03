@@ -101,6 +101,14 @@ export default function PaymentWidget() {
     [remainingDue, submitAttempted, allocatedTotal]
   );
 
+  // True when this is a split payment where the only overpayment is cash that is given back as change
+  const isChangeDueSplitScenario = useMemo(() => {
+    const changeDueNum = Number(changeDue) || 0;
+    if (changeDueNum <= 0) return false;
+    const overpayment = (Number(allocatedTotal) || 0) - (Number(targetTotalDue) || 0);
+    return overpayment > 0 && Math.abs(overpayment - changeDueNum) < 0.01;
+  }, [changeDue, allocatedTotal, targetTotalDue]);
+
   useEffect(() => {
     const totalDueNum = Number(targetTotalDue) || 0;
     const nonCashPaid = cardTotal + chequeTotal;
@@ -114,7 +122,7 @@ export default function PaymentWidget() {
     if (submitAttempted || allocatedTotal > 0) {
       setFieldErrors(validateAll());
     }
-  }, [allocatedTotal, targetTotalDue, submitAttempted]);
+  }, [allocatedTotal, targetTotalDue, submitAttempted, isChangeDueSplitScenario]);
 
 
   // Allow host to pass init via URL for static hosting fallback
@@ -278,9 +286,9 @@ export default function PaymentWidget() {
       if (!cvv) errs.cvv = 'Enter authorization number';
     }
 
-    // Block if total payment exceeds the target amount (overpayment)
-    // Allow overpayment only when paying with Cash alone (to support change due)
-    if (!isCashOnly && allocatedTotal > targetTotalDue) {
+    // Block if total payment exceeds the target amount (overpayment).
+    // Allow overpayment only when: (1) Cash only, or (2) split payment where excess equals change due (cash tendered > cash portion, change given back). Other overpayments (e.g. card/cheque over total due) remain blocked.
+    if (!isCashOnly && allocatedTotal > targetTotalDue && !isChangeDueSplitScenario) {
       errs.overpayment = 'Total payment should not exceed the amount due';
     }
 
@@ -932,7 +940,7 @@ export default function PaymentWidget() {
                   <button
                     type="submit"
                     className="pw-btn"
-                    disabled={submitting || remainingDue > 0 || (!isCashOnly && allocatedTotal > targetTotalDue)}
+                    disabled={submitting || remainingDue > 0 || (!isCashOnly && allocatedTotal > targetTotalDue && !isChangeDueSplitScenario)}
                   >
                     {submitting ? 'Processing…' : 'Submit'}
                   </button>
